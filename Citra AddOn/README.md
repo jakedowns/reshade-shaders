@@ -12,7 +12,7 @@
 - basically a clone of the Generic Depth addon, that remaps all calls from other effects/addons looking to access the `DEPTH` texture to instead access a pre-processed depth texture, specially modified to normalize it from Citra's emulation-specific values to something more standardly consumable by other shader effects pipelines
 
 ### Installation:
-1. download `citra.addon` (64-bit) or `citra32.addon` into the same directory as `ReShade.ini` and `citra-qt.exe`
+1. download [`citra.addon`](./citra.addon) (64-bit) OR [`citra32.addon`](./citra32.addon) (32-bit) into the same directory as `ReShade.ini` and `citra-qt.exe`
 2. place `Citra.fx` in `./reshade-shaders/Shaders/` sub-directory within the Citra executable folder
 4. start citra. (if it crashes or reshade doesn't launch, disable generic depth, edit ReShade.ini:
 ```
