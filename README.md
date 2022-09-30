@@ -12,7 +12,7 @@ WIP Fixing/Simplifying Citra Support for ReShade, ReGlass + Refract for Looking 
 
 Gist Overview for Manually adding Citra Support for ReShade: 
 
-https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
+https://github.com/jakedowns/reshade-shaders/tree/main/interlaced-shader
 
 > NOTE: i'm currently working on packaging all this up into a Citra add-on for ReShade. I'll post on reshade / citra subreddits when it's ready. feel free to follow me on twitter for updates as well: https://twitter.com/jakedowns You can also subscribe to this github repo for updates
 
