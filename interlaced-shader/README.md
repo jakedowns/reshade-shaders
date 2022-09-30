@@ -1,4 +1,4 @@
-How to use Citra with Looking Glass Portrait
+How to use Citra with Looking Glass Portrait via the lookingglass.glsl interlaced shader
 
 In Citra
 
