@@ -36,6 +36,15 @@ you can try altering the shader, you can press F9 or F10 or F11 in citra to relo
 
 if it crashes, you've introduced a syntax error into the shader. undo and try again.
 
+The main values to be tweaked are:
+`float repeat = 100/3;` 
+> // the number of times the LL/RR stereo pair will be repeated across the full viewing angle. 
+> More repeats (100/4, 100/5) = more cross-talk, but more flexibility in viewing angles. 
+> Lower divisions (100/1, 100/2) = less cross-talk, but there's only 1 or two "sweet spots"
+
+`< repeat*0.5`
+you can change this `0.5` to kind of... shift or rotate the sweet spot left or right
+
 ### Misc.
 
 If the looking-glass-calibration url above doesn't work, here's a fallback version on codesandbox: 
