@@ -43,3 +43,7 @@ If the looking-glass-calibration url above doesn't work, here's a fallback versi
 https://codesandbox.io/s/floral-flower-w2sjmx?file=/index.html
 
 If that doesn't work, try restarting Holoplay Service
+
+### Related
+
+If you want to try something a little more advanced, check out my [Citra addon for ReShade, ReGlass & Refract](https://github.com/jakedowns/reshade-shaders/tree/main/Citra%20AddOn)
