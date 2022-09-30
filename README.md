@@ -1,17 +1,20 @@
 # reshade-shaders
 Shaders for ReShade for Citra and other misc things
 
-Gist Overview for Manually adding Citra Support for ReShade: https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
+WIP Adding ReShade support for Citra:
+https://github.com/citra-emu/citra/issues/4881
+
+WIP Fixing/Simplifying Citra Support for ReShade, ReGlass + Refract for Looking Glass Portrait
+
+*Released* Introducing an interlaced shader for Citra + Looking Glass Portrait Support: https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
+
+---
+
+Gist Overview for Manually adding Citra Support for ReShade: 
+
+https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
 
 > NOTE: i'm currently working on packaging all this up into a Citra add-on for ReShade. I'll post on reshade / citra subreddits when it's ready. feel free to follow me on twitter for updates as well: https://twitter.com/jakedowns You can also subscribe to this github repo for updates
-
-#### You might also like my *Interlaced Shader for Looking Glass Portrait for Citra*
-Instructions / glsl code for that can be found here: https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
-
-#### Coming Soon: Screen-Space Ray Traced Global Illumination for 3DS Roms (and other fun effects)
-
-![image](https://user-images.githubusercontent.com/1683122/193213027-875aa8b5-0a92-4438-a79d-32b3ca56439f.png)
-
 
 ### Devlog
 
