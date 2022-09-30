@@ -7,6 +7,11 @@ NOTE: i'm currently working on packaging all this up into a Citra add-on for ReS
 
 https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
 
+#### Coming Soon: Screen-Space Ray Traced Global Illumination for 3DS Roms (and other fun effects)
+
+![image](https://user-images.githubusercontent.com/1683122/193213027-875aa8b5-0a92-4438-a79d-32b3ca56439f.png)
+
+
 ### Devlog
 
 #### 9.29.2022
