@@ -1,6 +1,7 @@
 /*
  * 2022 Jake Downs
  */
+
 /*
 *
 * Based on generic_depth
@@ -25,7 +26,7 @@ static bool s_disable_intz = false;
 // Enable or disable the creation of backup copies at clear operations on the selected depth-stencil
 static unsigned int s_preserve_depth_buffers = 0;
 // Enable or disable the aspect ratio check from 'check_aspect_ratio' in the detection heuristic
-static unsigned int s_use_aspect_ratio_heuristics = 1;
+static unsigned int s_use_aspect_ratio_heuristics = 0;
 
 enum class clear_op
 {
@@ -64,7 +65,7 @@ struct depth_stencil_hash
 	}
 };
 
-struct __declspec(uuid("43319e83-387c-448e-881c-7e68fc2e52c4")) state_tracking
+struct __declspec(uuid("ad059cc1-c3ad-4cef-a4a9-401f672c6c37")) state_tracking
 {
 	viewport current_viewport = {};
 	resource current_depth_stencil = { 0 };
@@ -349,7 +350,7 @@ static void update_effect_runtime(effect_runtime *runtime)
 
 	resource_view srv, srv_srgb;
 
-	effect_texture_variable ModifiedDepthTex_handle = runtime->find_texture_variable("ModifyDepth.fx", "ModifiedDepthTex");
+	effect_texture_variable ModifiedDepthTex_handle = runtime->find_texture_variable("Citra.fx", "ModifiedDepthTex");
 	runtime->get_texture_binding(ModifiedDepthTex_handle, &srv, &srv_srgb);
 
 	runtime->update_texture_bindings("DEPTH", srv, srv_srgb);
@@ -1232,7 +1233,7 @@ void unregister_addon_depth()
 	reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(update_effect_runtime);
 }
 
-extern "C" __declspec(dllexport) const char *NAME = "Citra Add-On";
+extern "C" __declspec(dllexport) const char *NAME = "Citra";
 extern "C" __declspec(dllexport) const char *DESCRIPTION = "add-on that pre-processes depth buffer from Citra to be standardized / aligned for other add-ons to consume it.";
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID)

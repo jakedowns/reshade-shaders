@@ -62,8 +62,8 @@ uniform float fUIFarPlane <
   ui_category = "Depth";
   ui_tooltip = "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=<value>";
   ui_min = 0.0; ui_max = 1000.0;
-  ui_step = 0.01;
-> = 0.20;
+  ui_step = 0.001;
+> = 0.01;
 
 uniform float fUIDepthMultiplier <
   ui_type = "drag";
