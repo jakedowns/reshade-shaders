@@ -2,6 +2,7 @@
 // September 24, 2022
 // Created by Holophone3D and Jake Downs
 // inspired by Ian Reese & Yann Vernier (lonetech)
+// Original Source: https://github.com/jakedowns/reshade-shaders
 
 // Calibration values 
 // via: https://jakedowns.github.io/looking-glass-calibration.html
