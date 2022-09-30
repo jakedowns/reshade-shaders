@@ -26,7 +26,7 @@ DisabledAddons=Generic Depth
 <img width="400" src="https://user-images.githubusercontent.com/1683122/193273026-6a91450c-cc2c-4620-90cf-5ca975ce9a9c.png" /> <img width="400" src="https://user-images.githubusercontent.com/1683122/193273249-67039451-b3e5-4627-92e8-b7555ae69bf9.png" />
 
 
-### Recommended / Tested Companion Add-ons:
+### Recommended / Tested Effects:
 
 - *Looking Glass Portrait Support:*
   - [ReGlass](https://github.com/jbienz/ReGlass) aka [LookingGlass.fx](https://github.com/jbienz/ReGlass/blob/main/Shaders/LookingGlass.fx) 
