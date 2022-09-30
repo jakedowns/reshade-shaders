@@ -2,6 +2,11 @@
 
 ### 🚧 \*\* **Work in Progress** \*\*
 
+NOTE in order to test this, you'll need a custom build of Citra. You can build it yourself from this [tagged commit](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/tree/reshade-left-eye-optional), or download the citra-qt.exe from the release page here: https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/releases/tag/reshade-left-eye-optional
+
+Hopefully the pull request to fix this gets merged: https://github.com/citra-emu/citra/pull/6140
+or, i'll find another way to capture the left-eye's depth buffer to negate the need for this patch
+
 ### Features:
 - normalizes Citra's depth buffers to be usable by other existing ReShade effects
   - rotates depth buffer so x,y uv coordinates are correct
