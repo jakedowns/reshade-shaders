@@ -25,9 +25,9 @@ DisabledAddons=Generic Depth
 
 ### Recommended / Tested Companion Add-ons:
 
-*Looking Glass Portrait Support:*
--- [ReGlass](https://github.com/jbienz/ReGlass) aka [LookingGlass.fx](https://github.com/jbienz/ReGlass/blob/main/Shaders/LookingGlass.fx) 
--- + [Refract](https://github.com/SolerSoft/Refract)
+- *Looking Glass Portrait Support:*
+  - [ReGlass](https://github.com/jbienz/ReGlass) aka [LookingGlass.fx](https://github.com/jbienz/ReGlass/blob/main/Shaders/LookingGlass.fx) 
+  - with [Refract](https://github.com/SolerSoft/Refract)
 
 - [MXAO.fx](https://github.com/cyrie/Stormshade/blob/master/reshade-shaders/Shaders/MXAO.fx)
 - [CinematicDOF.fx](https://github.com/FransBouma/OtisFX/blob/master/Shaders/CinematicDOF.fx)
@@ -46,9 +46,9 @@ DisabledAddons=Generic Depth
 - certain window dimensions require a lot of manual offset adjustments, i'm working on automating these
 
 ### Credits
-- [crosire](https://github.com/crosire/reshade) - Big thanks for giving me the guidance to get this add-on working
-- [Edgarska](https://www.reddit.com/r/Citra/comments/i4o5i1/reshade_depth_buffer_access_fix/) - their reddit post in /r/ReShade, [Reshade depth buffer access fix.](https://www.reddit.com/r/Citra/comments/i4o5i1/reshade_depth_buffer_access_fix/) gave me a lot of the basics I needed to get this working. I simply packaged them up.
-- [Holophone3D] - thanks for the motivation and inspiration to get this working. also thanks for getting the ball rolling with the basics for the shader / fx code.
+- [crosire](https://github.com/crosire/reshade) - Big thanks for giving us the guidance to get this add-on working
+- [Edgarska](https://www.reddit.com/r/Citra/comments/i4o5i1/reshade_depth_buffer_access_fix/) - their reddit post in /r/ReShade, [Reshade depth buffer access fix.](https://www.reddit.com/r/Citra/comments/i4o5i1/reshade_depth_buffer_access_fix/) gave us a lot of the basics we needed to get this working. I simply packaged them up.
+- Holophone3D - thanks for the motivation and inspiration to get this working. also thanks for getting the ball rolling with the basics for the shader / fx code.
 - [jbienz](https://github.com/jbienz) / [SolerSoft](https://github.com/SolerSoft) - thanks for your enthusiasm and encouragement, and for your great work on ReGlass & Refract
 - emufan4568 - thanks for your help on the Citra discord #development channel
 - jakedowns - follow me on twitter.com/jakedowns for future updates | support my dev work on patreon.com/jakedownsthings | follow my art work on instagram.com/jakedownsthings
