@@ -2,12 +2,7 @@
 
 ### 🚧 \*\* **Work in Progress** \*\*
 
-**Note** if ReShade is a little too advanced for you, try starting with the shader-only setup. No ReShade needed, just Citra + a custom [Looking Glass Interlacing Shader for Citra](https://github.com/jakedowns/reshade-shaders/tree/main/interlaced-shader)
-
-NOTE in order to test this, you'll need a custom build of Citra. You can build it yourself from this [tagged commit](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/tree/reshade-left-eye-optional), or [download the citra-qt.exe from the release page here](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/releases/tag/reshade-left-eye-optional)
-
-Hopefully the pull request to fix this gets merged: https://github.com/citra-emu/citra/pull/6140
-or, i'll find another way to capture the left-eye's depth buffer to negate the need for this patch
+**Easier Alternative for Beginners** if ReShade is a little too advanced for you, try starting with the shader-only setup. No ReShade needed, just Citra + a custom [Looking Glass Interlacing Shader for Citra](https://github.com/jakedowns/reshade-shaders/tree/main/interlaced-shader)
 
 ### Features:
 - normalizes Citra's depth buffers to be usable by other existing ReShade effects
@@ -19,6 +14,13 @@ or, i'll find another way to capture the left-eye's depth buffer to negate the n
 - basically a clone of the Generic Depth addon, that remaps all calls from other effects/addons looking to access the `DEPTH` texture to instead access a pre-processed depth texture, specially modified to normalize it from Citra's emulation-specific values to something more standardly consumable by other shader effects pipelines
 
 ### Installation:
+
+> **Note** in order to test this, you'll need a custom build of Citra. You can build it yourself from this [tagged commit](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/tree/reshade-left-eye-optional), or [download the citra-qt.exe from the release page here](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/releases/tag/reshade-left-eye-optional)
+> 
+> Hopefully the pull request to fix this gets merged: https://github.com/citra-emu/citra/pull/6140
+> or, i'll find another way to capture the left-eye's depth buffer to negate the need for this patch
+
+
 1. download [`citra.addon`](./citra.addon) (64-bit) OR [`citra32.addon`](./citra32.addon) (32-bit) into the same directory as `ReShade.ini` and `citra-qt.exe`
 2. place `Citra.fx` in `./reshade-shaders/Shaders/` sub-directory within the Citra executable folder
 4. start citra. (if it crashes or reshade doesn't launch, disable generic depth, edit ReShade.ini:
