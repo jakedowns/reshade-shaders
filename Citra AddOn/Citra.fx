@@ -150,7 +150,7 @@ uniform float4 Color <
 //              "Show both (Vertical 50/50)\0";
 // > = 2;
 
-texture OrigDepthTex : DEPTH;
+texture OrigDepthTex : ORIG_DEPTH;
 sampler OrigDepth{ Texture = OrigDepthTex; };
 
 texture ModifiedDepthTex{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
@@ -369,20 +369,20 @@ float GetModDepth(float2 tex : TEXCOORD) {
 
 float4 MyPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
 	float depth = GetModDepth(tex);
-	return float4(depth.xxx,0.0);
+	return float4(depth.xxx,1.0);
 }
 
 float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
 	if(bUIPreviewDepth){
 		float depth = GetModDepth(tex);
-		return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,0.0), bUIPreviewAlpha);
+		return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha);
 	}
 	return tex2D(ReShade::BackBuffer, tex);
 }
 
 
 // FullscreenVS
-technique ModifyDepth {
+technique Citra {
 	pass {
 		VertexShader = PostProcessVS;
 		PixelShader = MyPS;
