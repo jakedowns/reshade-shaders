@@ -5,7 +5,7 @@ Shaders for ReShade for Citra and other misc things
 https://github.com/jakedowns/reshade-shaders/tree/main/Citra%20AddOn
 
 ### Looking Glass Portrait Interlaced Shader for Citra
-https://gist.github.com/jakedowns/e6637f880e2fc3f9dfae5f34a6a8715c
+https://github.com/jakedowns/reshade-shaders/tree/main/interlaced-shader
 
 ### Devlog
 
