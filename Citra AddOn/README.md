@@ -15,6 +15,9 @@
 
 ### Installation:
 
+> **Note** This addon requires you to install the version of reShade with full add on support
+![image](https://user-images.githubusercontent.com/1683122/193439578-164b9797-dd68-4353-a3ae-5b9b48d564ee.png)
+
 > **Note** in order to test this, you'll need a custom build of Citra. You can build it yourself from this [tagged commit](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/tree/reshade-left-eye-optional), or [download the citra-qt.exe from the release page here](https://github.com/jakedowns/citra-fix-custom-interlaced-shader-path/releases/tag/reshade-left-eye-optional)
 > 
 > Hopefully the pull request to fix this gets merged: https://github.com/citra-emu/citra/pull/6140
