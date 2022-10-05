@@ -2,7 +2,7 @@
 // September 24, 2022
 // Created by Holophone3D and Jake Downs
 // inspired by Ian Reese & Yann Vernier (lonetech)
-// Original Source: https://github.com/jakedowns/reshade-shaders
+// original source https://github.com/jakedowns/reshade-shaders/tree/main/interlaced-shader/
 
 // Calibration values 
 // via: https://jakedowns.github.io/looking-glass-calibration.html
@@ -12,27 +12,28 @@ float pitch = 52.59267044067383;
 
 // this is especially made for looking glass portrait.
 // TODO: make it more generic / able to support other variations
-float width = o_resolution.y; //1536.0f;
-float height = o_resolution.x; //width * 240.0f / 400.0f;
+float width = o_resolution.y; 
+float height = o_resolution.x;
 float dpi = 324.0f;
 
 float tilt = height / (width * slope);
 float pitch_adjusted = pitch * width / dpi * cos(atan(1.0, slope));
 float subp = 1.0 / (3.0f * width) * pitch_adjusted;
-float repeat = 100/3;
+float repeat = 100/2;
 
 vec4 my_sample(float alpha){
     // sample right eye
     
     // one-shot mode
-    //if(fract(alpha) <= .6){
+    if(fract(alpha) > 0.145){
+    // if(alpha < -100){
     // repeated mode
-    if(mod(fract(alpha)*100,repeat) < repeat*0.5){
-        // return vec4(0.1,0,0,1); // debug color
+    //if(mod(fract(alpha)*100,repeat) >= repeat*0.5){
+        // return vec4(1,0,0,1); // debug color
         return texture(color_texture_r, frag_tex_coord);
     }
     // sample left eye
-    // return vec4(0,0,0.1,1); // debug color
+    // return vec4(0,0,1,1); // debug color
     return texture(color_texture, frag_tex_coord);
 }
 
