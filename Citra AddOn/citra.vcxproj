@@ -47,7 +47,7 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup>
-    <OutDir>.\bin\$(Platform)_$(Configuration)\</OutDir>
+    <OutDir>..\..\Citra\build\bin\Release\</OutDir>
     <IntDir>.\intermediate\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>citra</TargetName>
     <TargetExt>.addon</TargetExt>

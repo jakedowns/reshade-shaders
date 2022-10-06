@@ -1,6 +1,7 @@
 Citra AddOn/.vs/
 Citra AddOn/intermediate/
 Citra AddOn/bin/
+Citra AddOn/deps/imgui/
 
 # Visual Studio cache files
 */.vs/
