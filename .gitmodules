@@ -1,0 +1,3 @@
+[submodule "imgui"]
+	path = Citra Addon/deps/imgui
+	url = https://github.com/ocornut/imgui.git
