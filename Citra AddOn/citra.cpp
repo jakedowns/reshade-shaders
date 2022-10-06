@@ -336,11 +336,49 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 	counters.current_stats = { 0, 0 };
 }
 
+
 static void update_effect_runtime(effect_runtime *runtime)
 {
 	const generic_depth_data &instance = runtime->get_private_data<generic_depth_data>();
 
 	runtime->update_texture_bindings("ORIG_DEPTH", instance.selected_shader_resource);
+
+	// bind backup stencils as separate textures
+	device *const device = runtime->get_device();
+	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
+	int size = (int)device_data.depth_stencil_backups.size();
+	char numberstring[512] = "";
+	sprintf_s(numberstring, "backups: %d", size);
+	reshade::log_message(2, numberstring);
+	const device_api api = device->get_api();
+
+	int offset = 1;
+
+	for (const depth_stencil_backup &depth_stencil_backup : device_data.depth_stencil_backups)
+	{
+		resource_desc desc = device->get_resource_desc(depth_stencil_backup.depth_stencil_resource);
+		resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(desc.texture.format) : desc.texture.format);
+
+		char bound_name[512] = "";
+		sprintf_s(bound_name, "ORIG_DEPTH_%d", offset);
+
+		// container var for create_resource_view to bind to
+		resource_view backup_rv;
+		if (device->create_resource_view(depth_stencil_backup.backup_texture, resource_usage::shader_resource, srv_desc, &backup_rv)) {
+			
+			char bound_name_msg[512] = "";
+			sprintf_s(bound_name, "bound: %s", bound_name);
+			runtime->update_texture_bindings(bound_name, backup_rv);
+			reshade::log_message(2, bound_name_msg);
+		}
+		else {
+			char error_msg[512] = "";
+			sprintf_s(error_msg, "error binding %s", bound_name);
+			reshade::log_message(2, error_msg);
+		}
+
+		offset++;
+	}
 
 	runtime->enumerate_uniform_variables(nullptr, [&instance](effect_runtime *runtime, auto variable) {
 		char source[32] = "";
@@ -349,6 +387,9 @@ static void update_effect_runtime(effect_runtime *runtime)
 	});
 
 	resource_view srv, srv_srgb;
+
+
+	// TODO: log error when find_Texture_variable fails
 
 	effect_texture_variable ModifiedDepthTex_handle = runtime->find_texture_variable("Citra.fx", "ModifiedDepthTex");
 	runtime->get_texture_binding(ModifiedDepthTex_handle, &srv, &srv_srgb);
@@ -1151,6 +1192,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 			queue->wait_idle(); // Ensure resource view is no longer in-use before destroying it
 			device->destroy_resource_view(data.selected_shader_resource);
+			reshade::log_message(2, "TODO: destroy ALL resource views here, not just selected");
 
 			device_data.untrack_depth_stencil(data.selected_depth_stencil);
 		}
