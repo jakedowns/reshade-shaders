@@ -245,6 +245,13 @@ struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_de
 	}
 };
 
+std::string config_get_string(effect_runtime* runtime, const char* section, const char* key) {
+	char buffer[512] = "";
+	size_t buffer_length = sizeof(buffer);
+	reshade::config_get_value(runtime, section, key, buffer, &buffer_length);
+	return std::string(buffer, buffer + buffer_length);
+}
+
 // Checks whether the aspect ratio of the two sets of dimensions is similar or not
 static bool check_aspect_ratio(float width_to_check, float height_to_check, uint32_t width, uint32_t height)
 {
