@@ -9,8 +9,10 @@
 * SPDX-License-Identifier: BSD-3-Clause
 */
 
+
 #include <imgui.h>
 #include <reshade.hpp>
+#include "hook_info.hpp"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -24,7 +26,7 @@ static std::shared_mutex s_mutex;
 
 static bool s_disable_intz = false;
 // Enable or disable the creation of backup copies at clear operations on the selected depth-stencil
-static unsigned int s_preserve_depth_buffers = 1;
+static unsigned int s_preserve_depth_buffers = 2;
 // Enable or disable the aspect ratio check from 'check_aspect_ratio' in the detection heuristic
 static unsigned int s_use_aspect_ratio_heuristics = 0;
 static unsigned int s_do_break_on_clear = 0;
@@ -141,6 +143,23 @@ struct __declspec(uuid("7c6363c7-f94e-437a-9160-141782c44a98")) generic_depth_da
 	std::unordered_map<resource, unsigned int, depth_stencil_hash> display_count_per_depth_stencil;
 };
 
+struct generic_backbuffer_backup
+{
+	// The number of effect runtimes referencing this backup
+	size_t references = 1;
+
+	resource_desc left_resource_desc;
+
+	resource left_pass_texture_resource = { 0 };
+
+	resource_view left_pass_resource_view = { 0 };
+
+	resource right_pass_texture_resource = { 0 };
+
+	resource_view right_pass_resource_view = { 0 };
+
+};
+
 struct depth_stencil_backup
 {
 	// The number of effect runtimes referencing this backup
@@ -163,8 +182,21 @@ struct depth_stencil_backup
 	uint32_t frame_height = 0;
 };
 
+struct __declspec(uuid("036CD16B-E823-4D6C-A137-5C335D6FD3E6")) command_list_data
+{
+	bool has_multiple_rtvs = false;
+	resource_view current_main_rtv = { 0 };
+	uint32_t current_render_pass_index = 0;
+};
+
 struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_device_data
 {
+
+	effect_runtime* main_runtime = nullptr;
+	uint32_t offset_from_last_pass = 0;
+	uint32_t last_render_pass_count = 1;
+	uint32_t current_render_pass_count = 0;
+
 	// List of queues created for this device
 	std::vector<command_queue *> queues;
 
@@ -179,6 +211,8 @@ struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_de
 
 	// List of depth-stencils that should be tracked throughout each frame and potentially be backed up during clear operations
 	std::vector<depth_stencil_backup> depth_stencil_backups;
+
+	generic_backbuffer_backup my_backbuffer_backup = generic_backbuffer_backup();
 
 	depth_stencil_backup *find_depth_stencil_backup(resource resource)
 	{
@@ -279,6 +313,37 @@ struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_de
 	}
 };
 
+struct capture_data
+{
+	uint32_t cx;
+	uint32_t cy;
+	reshade::api::format format;
+	bool using_shtex;
+	bool multisampled;
+
+	union
+	{
+		/* shared texture */
+		struct
+		{
+			shtex_data* shtex_info;
+			reshade::api::resource texture;
+			HANDLE handle;
+		} shtex;
+		/* shared memory */
+		struct
+		{
+			reshade::api::resource copy_surfaces[NUM_BUFFERS];
+			bool texture_ready[NUM_BUFFERS];
+			bool texture_mapped[NUM_BUFFERS];
+			uint32_t pitch;
+			shmem_data* shmem_info;
+			int cur_tex;
+			int copy_wait;
+		} shmem;
+	};
+} data;
+
 std::string config_get_string(effect_runtime* runtime, const char* section, const char* key) {
 	char buffer[512] = "";
 	size_t buffer_length = sizeof(buffer);
@@ -310,6 +375,12 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 	device *const device = cmd_list->get_device();
 
 	depth_stencil_backup *const depth_stencil_backup = device->get_private_data<generic_depth_device_data>().find_depth_stencil_backup(depth_stencil);
+
+	bool test = false;
+	if (s_do_break_on_clear) {
+		test = true;
+	}
+
 	if (depth_stencil_backup == nullptr || depth_stencil_backup->backup_texture == 0 || depth_stencil_backup->backup_texture_right == 0)
 		return;
 
@@ -317,8 +388,8 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 	depth_stencil_info &counters = state.counters_per_used_depth_stencil[depth_stencil];
 
 	// Ignore clears when there was no meaningful workload (e.g. at the start of a frame)
-	if (counters.current_stats.drawcalls == 0)
-		return;
+	/*if (counters.current_stats.drawcalls == 0)
+		return;*/
 
 	// Ignore clears when the last viewport rendered to only affected a small subset of the depth-stencil (fixes flickering in some games)
 	//switch (op)
@@ -345,33 +416,46 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 	{
 		if (op != clear_op::unbind_depth_stencil_view)
 		{
+			/*if (counters.current_stats.vertices >= state.best_copy_stats.vertices) {
+				reshade::log_message(3, "beat");
+			}*/
 			// If clear index override is set to zero, always copy any suitable buffers
-			//if (depth_stencil_backup->force_clear_index == 0)
-			//{
-			//	// Use greater equals operator here to handle case where the same scene is first rendered into a shadow map and then for real (e.g. Mirror's Edge main menu)
-			//	do_copy = counters.current_stats.vertices >= state.best_copy_stats.vertices || (op == clear_op::fullscreen_draw && counters.current_stats.drawcalls >= state.best_copy_stats.drawcalls);
-			//}
-			//else if (std::numeric_limits<size_t>::max() == depth_stencil_backup->force_clear_index)
-			//{
-			//	// Special case for Garry's Mod which chooses the last clear operation that has a high workload
-			//	do_copy = counters.current_stats.vertices >= 5000;
-			//}
-			/*else
-			{*/
+			if (depth_stencil_backup->force_clear_index == 0)
+			{
+				// Use greater equals operator here to handle case where the same scene is first rendered into a shadow map and then for real (e.g. Mirror's Edge main menu)
+				do_copy = counters.current_stats.vertices >= state.best_copy_stats.vertices || (op == clear_op::fullscreen_draw && counters.current_stats.drawcalls >= state.best_copy_stats.drawcalls);
+			}
+			else if (std::numeric_limits<size_t>::max() == depth_stencil_backup->force_clear_index)
+			{
+				// Special case for Garry's Mod which chooses the last clear operation that has a high workload
+				do_copy = counters.current_stats.vertices >= 5000;
+			}
+			else
+			{
 				// This is not really correct, since clears may accumulate over multiple command lists, but it's unlikely that the same depth-stencil is used in more than one
 				// CITRA NOTE: "but it's unlikely that the same depth-stencil is used in more than one" this is NOT TRUE for Citra emulator
 				// as far as i can tell, all the games i've tested so far use the SAME depth-stencil for Left/Right eye to save memory
 				// first drawing left, then clearing and drawing right
-			//	do_copy = counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);
-			//}
+				do_copy = counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);
+			}
 
 			// CITRA VERSION
 			/*if (counters.current_stats.vertices < 10) {
 				do_copy = false;
 			}*/
-			do_copy = true; // just... always copy
+			/*do_copy = counters.current_stats.vertices >= state.best_copy_stats.vertices 
+				|| (op == clear_op::fullscreen_draw && counters.current_stats.drawcalls >= state.best_copy_stats.drawcalls)
+				|| counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);*/
+			do_copy = true;
 
-			counters.clears.push_back({ counters.current_stats, op, do_copy });
+			// record the clear op
+			try {
+				counters.clears.push_back({ counters.current_stats, op, do_copy });
+			}
+			catch (std::exception& e) {
+				reshade::log_message(1, e.what());
+			}
+			
 		}
 
 		// Make a backup copy of the depth texture before it is cleared
@@ -401,6 +485,9 @@ static void update_effect_runtime(effect_runtime *runtime)
 	runtime->update_texture_bindings("ORIG_DEPTH", instance.selected_shader_resource);
 	// ORIG_DEPTH_RIGHT
 	runtime->update_texture_bindings("ORIG_DEPTH_2", instance.selected_shader_resource_right);
+
+	/*runtime->update_texture_bindings("RGB_LEFT", instance.selected_shader_resource);
+	runtime->update_texture_bindings("RGB_RIGHT", instance.selected_shader_resource_right);*/
 
 	runtime->enumerate_uniform_variables(nullptr, [&instance](effect_runtime *runtime, auto variable) {
 		char source[32] = "";
@@ -598,14 +685,17 @@ static void on_destroy_resource(device *device, resource resource)
 static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t, uint32_t)
 {
 	auto &state = cmd_list->get_private_data<state_tracking>();
-	if (state.current_depth_stencil == 0)
+	if (state.current_depth_stencil == 0) {
+		// TODO: look into tracking RGB here!
 		return false; // This is a draw call with no depth-stencil bound
+	}
+		
 
 	// Check if this draw call likely represets a fullscreen rectangle (two triangles), which would clear the depth-stencil
 	const bool fullscreen_draw = vertices == 6 && instances == 1;
-	if (fullscreen_draw //&&
-		//s_preserve_depth_buffers == 2 &&
-		//state.first_draw_since_bind //&&
+	if (fullscreen_draw
+		//&& s_preserve_depth_buffers == 2
+		&& state.first_draw_since_bind
 		// But ignore that in Vulkan (since it is invalid to copy a resource inside an active render pass)
 		//cmd_list->get_device()->get_api() != device_api::vulkan
 		)
@@ -613,15 +703,20 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 
 	state.first_draw_since_bind = false;
 
-	depth_stencil_info &counters = state.counters_per_used_depth_stencil[state.current_depth_stencil];
-	counters.total_stats.vertices += vertices * instances;
-	counters.total_stats.drawcalls += 1;
-	counters.current_stats.vertices += vertices * instances;
-	counters.current_stats.drawcalls += 1;
+	try {
+		depth_stencil_info& counters = state.counters_per_used_depth_stencil[state.current_depth_stencil];
+		counters.total_stats.vertices += vertices * instances;
+		counters.total_stats.drawcalls += 1;
+		counters.current_stats.vertices += vertices * instances;
+		counters.current_stats.drawcalls += 1;
 
-	// Skip updating last viewport for fullscreen draw calls, to prevent a clear operation in Prince of Persia: The Sands of Time from getting filtered out
-	if (!fullscreen_draw)
-		counters.current_stats.last_viewport = state.current_viewport;
+		// Skip updating last viewport for fullscreen draw calls, to prevent a clear operation in Prince of Persia: The Sands of Time from getting filtered out
+		if (!fullscreen_draw)
+			counters.current_stats.last_viewport = state.current_viewport;
+	}
+	catch (std::exception& e) {
+		reshade::log_message(1, e.what());
+	}
 
 	return false;
 }
@@ -637,8 +732,10 @@ static bool on_draw_indirect(command_list *cmd_list, indirect_command type, reso
 		return false;
 
 	auto &state = cmd_list->get_private_data<state_tracking>();
-	if (state.current_depth_stencil == 0)
+	if (state.current_depth_stencil == 0) {
+		// TODO: look into tracking RGB here!
 		return false; // This is a draw call with no depth-stencil bound
+	}
 
 	depth_stencil_info &counters = state.counters_per_used_depth_stencil[state.current_depth_stencil];
 	counters.total_stats.drawcalls += draw_count;
@@ -743,10 +840,181 @@ static void on_execute_secondary(command_list *cmd_list, command_list *secondary
 	}
 }
 
-static void on_present(command_queue *, swapchain *swapchain, const rect *, const rect *, uint32_t, const rect *)
+static bool capture_impl_init(reshade::api::swapchain* swapchain)
+{
+	reshade::api::device* const device = swapchain->get_device();
+
+	const reshade::api::resource_desc desc = device->get_resource_desc(swapchain->get_current_back_buffer());
+	data.format = reshade::api::format_to_default_typed(desc.texture.format, 0);
+	data.multisampled = desc.texture.samples > 1;
+	data.cx = desc.texture.width;
+	data.cy = desc.texture.height;
+
+	/*if (device->get_api() != reshade::api::device_api::opengl)
+	{
+		data.using_shtex = true;
+
+		if (!device->create_resource(
+			reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_only, reshade::api::resource_usage::shader_resource | reshade::api::resource_usage::copy_dest, reshade::api::resource_flags::shared),
+			nullptr,
+			reshade::api::resource_usage::copy_dest,
+			&data.shtex.texture,
+			&data.shtex.handle))
+			return false;
+
+		if (!capture_init_shtex(data.shtex.shtex_info, swapchain->get_hwnd(), data.cx, data.cy, static_cast<uint32_t>(data.format), false, (uintptr_t)data.shtex.handle))
+			return false;
+	}
+	else
+	{*/
+		data.using_shtex = false;
+
+		for (int i = 0; i < NUM_BUFFERS; i++)
+		{
+			if (!device->create_resource(
+				reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_to_cpu, reshade::api::resource_usage::copy_dest),
+				nullptr,
+				reshade::api::resource_usage::cpu_access,
+				&data.shmem.copy_surfaces[i]))
+				return false;
+		}
+
+		reshade::api::subresource_data mapped;
+		if (device->map_texture_region(data.shmem.copy_surfaces[0], 0, nullptr, reshade::api::map_access::read_only, &mapped))
+		{
+			data.shmem.pitch = mapped.row_pitch;
+			device->unmap_texture_region(data.shmem.copy_surfaces[0], 0);
+		}
+
+		if (!capture_init_shmem(data.shmem.shmem_info, swapchain->get_hwnd(), data.cx, data.cy, data.shmem.pitch, static_cast<uint32_t>(data.format), false))
+			return false;
+	//}
+
+	return true;
+}
+
+static void capture_impl_free(reshade::api::swapchain* swapchain)
+{
+	reshade::api::device* const device = swapchain->get_device();
+
+	capture_free();
+
+	if (data.using_shtex)
+	{
+		device->destroy_resource(data.shtex.texture);
+	}
+	else
+	{
+		for (int i = 0; i < NUM_BUFFERS; i++)
+		{
+			if (data.shmem.copy_surfaces[i] == 0)
+				continue;
+
+			if (data.shmem.texture_mapped[i])
+				device->unmap_texture_region(data.shmem.copy_surfaces[i], 0);
+
+			device->destroy_resource(data.shmem.copy_surfaces[i]);
+		}
+	}
+
+	memset(&data, 0, sizeof(data));
+}
+
+static void capture_impl_shtex(reshade::api::command_queue* queue, reshade::api::resource back_buffer)
+{
+	reshade::api::command_list* cmd_list = queue->get_immediate_command_list();
+
+	if (data.multisampled)
+	{
+		cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::resolve_source);
+
+		cmd_list->resolve_texture_region(back_buffer, 0, nullptr, data.shtex.texture, 0, 0, 0, 0, data.format);
+
+		cmd_list->barrier(back_buffer, reshade::api::resource_usage::resolve_source, reshade::api::resource_usage::present);
+	}
+	else
+	{
+		cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::copy_source);
+
+		cmd_list->copy_resource(back_buffer, data.shtex.texture);
+
+		cmd_list->barrier(back_buffer, reshade::api::resource_usage::copy_source, reshade::api::resource_usage::present);
+	}
+}
+static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api::resource back_buffer)
+{
+	reshade::api::device* device = queue->get_device();
+	reshade::api::command_list* cmd_list = queue->get_immediate_command_list();
+
+	int next_tex = (data.shmem.cur_tex + 1) % NUM_BUFFERS;
+
+	if (data.shmem.texture_ready[next_tex])
+	{
+		data.shmem.texture_ready[next_tex] = false;
+
+		reshade::api::subresource_data mapped;
+		if (device->map_texture_region(data.shmem.copy_surfaces[next_tex], 0, nullptr, reshade::api::map_access::read_only, &mapped))
+		{
+			data.shmem.texture_mapped[next_tex] = true;
+			shmem_copy_data(next_tex, mapped.data);
+		}
+	}
+
+	if (data.shmem.copy_wait < NUM_BUFFERS - 1)
+	{
+		data.shmem.copy_wait++;
+	}
+	else
+	{
+		if (shmem_texture_data_lock(data.shmem.cur_tex))
+		{
+			device->unmap_texture_region(data.shmem.copy_surfaces[data.shmem.cur_tex], 0);
+			data.shmem.texture_mapped[data.shmem.cur_tex] = false;
+			shmem_texture_data_unlock(data.shmem.cur_tex);
+		}
+
+		if (data.multisampled)
+		{
+			cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::resolve_source);
+			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::cpu_access, reshade::api::resource_usage::resolve_dest);
+
+			cmd_list->resolve_texture_region(back_buffer, 0, nullptr, data.shmem.copy_surfaces[data.shmem.cur_tex], 0, 0, 0, 0, static_cast<reshade::api::format>(data.format));
+
+			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::resolve_dest, reshade::api::resource_usage::cpu_access);
+			cmd_list->barrier(back_buffer, reshade::api::resource_usage::resolve_source, reshade::api::resource_usage::present);
+		}
+		else
+		{
+			cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::copy_source);
+			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::cpu_access, reshade::api::resource_usage::copy_dest);
+
+			cmd_list->copy_resource(back_buffer, data.shmem.copy_surfaces[data.shmem.cur_tex]);
+
+			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::copy_dest, reshade::api::resource_usage::cpu_access);
+			cmd_list->barrier(back_buffer, reshade::api::resource_usage::copy_source, reshade::api::resource_usage::present);
+		}
+
+		data.shmem.texture_ready[data.shmem.cur_tex] = true;
+	}
+
+	data.shmem.cur_tex = next_tex;
+}
+
+bool capture_started = false;
+
+static void on_present(command_queue *queue, swapchain *swapchain, const rect *source_rect, const rect *dest_rect, uint32_t dirty_rect_count, const rect *dirty_rects)
 {
 	device *const device = swapchain->get_device();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
+	
+		
+	
+	// Keep track of the total render pass count of this frame
+	device_data.last_render_pass_count = device_data.current_render_pass_count > 0 ? device_data.current_render_pass_count : 1;
+	device_data.current_render_pass_count = 0;
+
+	if (device_data.offset_from_last_pass > device_data.last_render_pass_count)
+		device_data.offset_from_last_pass = device_data.last_render_pass_count;
 
 	const std::unique_lock<std::shared_mutex> lock(s_mutex);
 
@@ -805,7 +1073,7 @@ static void on_present(command_queue *, swapchain *swapchain, const rect *, cons
 static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_list, resource_view, resource_view)
 {
 	device *const device = runtime->get_device();
-	generic_depth_data &data = runtime->get_private_data<generic_depth_data>();
+	generic_depth_data &depth_data = runtime->get_private_data<generic_depth_data>();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
 
 	resource best_match = { 0 };
@@ -815,6 +1083,34 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 	//resource best_match_right_eye = { 0 };
 	//resource_desc match_desc_right_eye;
 	//const depth_stencil_info* best_snapshot_right_eye = nullptr;
+
+	// testing grabbing backbuffer twice during single frame to detangle left and right rgb, so we can bind it for shader access
+	// Change this event to e.g. 'reshade_begin_effects' to send images to OBS before ReShade effects are applied, or 'reshade_render_technique' to send after a specific technique.
+	/*size_t bb_count = swapchain->get_back_buffer_count();
+	resource current_bb = swapchain->get_current_back_buffer();
+	resource_desc bb_desc = device->get_resource_desc(current_bb);*/
+
+	/*if (global_hook_info == nullptr)
+		return;*/
+
+	/*if (capture_should_stop())
+		capture_impl_free(swapchain);*/
+
+		//if (capture_should_init())
+	if (!capture_started) {
+		capture_impl_init(runtime);
+		capture_started = true;
+	}
+
+	if (capture_started)
+	{
+		reshade::api::resource back_buffer = runtime->get_current_back_buffer();
+
+		if (data.using_shtex)
+			capture_impl_shtex(runtime->get_command_queue(), back_buffer);
+		else
+			capture_impl_shmem(runtime->get_command_queue(), back_buffer);
+	}
 
 	uint32_t frame_width, frame_height;
 	runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
@@ -845,12 +1141,12 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 		}
 	}
 
-	if (data.override_depth_stencil != 0)
+	if (depth_data.override_depth_stencil != 0)
 	{
 		const auto it = std::find_if(
 			current_depth_stencil_list.begin(), 
 			current_depth_stencil_list.end(),
-			[resource = data.override_depth_stencil](const auto &current) { return current.first == resource; });
+			[resource = depth_data.override_depth_stencil](const auto &current) { return current.first == resource; });
 
 		if (it != current_depth_stencil_list.end())
 		{
@@ -867,29 +1163,29 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 		depth_stencil_backup *depth_stencil_backup = device_data.find_depth_stencil_backup(best_match);
 
 		// if it changed or it was never set
-		if (best_match != data.selected_depth_stencil || data.selected_shader_resource == 0 || (s_preserve_depth_buffers && depth_stencil_backup == nullptr))
+		if (best_match != depth_data.selected_depth_stencil || depth_data.selected_shader_resource == 0 || (s_preserve_depth_buffers && depth_stencil_backup == nullptr))
 		{
 			// Destroy previous resource view, since the underlying resource has changed
-			if (data.selected_shader_resource != 0)
+			if (depth_data.selected_shader_resource != 0)
 			{
 				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
-				device->destroy_resource_view(data.selected_shader_resource);
+				device->destroy_resource_view(depth_data.selected_shader_resource);
 
 				//device_data.untrack_depth_stencil(data.selected_depth_stencil);
 			}
 
-			if (data.selected_shader_resource_right != 0)
+			if (depth_data.selected_shader_resource_right != 0)
 			{
 				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
-				device->destroy_resource_view(data.selected_shader_resource_right);
+				device->destroy_resource_view(depth_data.selected_shader_resource_right);
 
-				device_data.untrack_depth_stencil(data.selected_depth_stencil);
+				device_data.untrack_depth_stencil(depth_data.selected_depth_stencil);
 			}
 
-			data.using_backup_texture = false;
-			data.selected_depth_stencil = best_match;
-			data.selected_shader_resource = { 0 };
-			data.selected_shader_resource_right = { 0 };
+			depth_data.using_backup_texture = false;
+			depth_data.selected_depth_stencil = best_match;
+			depth_data.selected_shader_resource = { 0 };
+			depth_data.selected_shader_resource_right = { 0 };
 
 			// Create two-dimensional resource view to the first level and layer of the depth-stencil resource
 			//resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(best_match_desc.texture.format) : best_match_desc.texture.format);
@@ -922,12 +1218,12 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 				//if (!device->create_resource_view(depth_stencil_backup->backup_texture, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
 				//	return;
 
-				data.using_backup_texture = true;
+				depth_data.using_backup_texture = true;
 
-				if (!device->create_resource_view(depth_stencil_backup->backup_texture, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+				if (!device->create_resource_view(depth_stencil_backup->backup_texture, resource_usage::shader_resource, srv_desc, &depth_data.selected_shader_resource))
 					return;
 
-				if (!device->create_resource_view(depth_stencil_backup->backup_texture_right, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource_right))
+				if (!device->create_resource_view(depth_stencil_backup->backup_texture_right, resource_usage::shader_resource, srv_desc, &depth_data.selected_shader_resource_right))
 					return;
 
 				//data.using_backup_texture = true;
@@ -942,7 +1238,7 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 			update_effect_runtime(runtime);
 		}
 
-		if (data.using_backup_texture)
+		if (depth_data.using_backup_texture)
 		{
 			assert(depth_stencil_backup != nullptr && depth_stencil_backup->backup_texture != 0 && best_snapshot != nullptr);
 			const resource backup_texture = depth_stencil_backup->backup_texture;
@@ -1005,19 +1301,24 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 	else
 	{
 		// Unset any existing depth-stencil selected in previous frames
-		if (data.selected_depth_stencil != 0)
+		if (depth_data.selected_depth_stencil != 0)
 		{
-			if (data.selected_shader_resource != 0)
+			if (depth_data.selected_shader_resource != 0)
 			{
 				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
-				device->destroy_resource_view(data.selected_shader_resource);
-
-				device_data.untrack_depth_stencil(data.selected_depth_stencil);
+				device->destroy_resource_view(depth_data.selected_shader_resource);
 			}
+			if (depth_data.selected_shader_resource_right != 0)
+			{
+				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
+				device->destroy_resource_view(depth_data.selected_shader_resource_right);
+			}
+			device_data.untrack_depth_stencil(depth_data.selected_depth_stencil);
 
-			data.using_backup_texture = false;
-			data.selected_depth_stencil = { 0 };
-			data.selected_shader_resource = { 0 };
+			depth_data.using_backup_texture = false;
+			depth_data.selected_depth_stencil = { 0 };
+			depth_data.selected_shader_resource = { 0 };
+			depth_data.selected_shader_resource_right = { 0 };
 
 			update_effect_runtime(runtime);
 		}
@@ -1076,6 +1377,23 @@ static void draw_settings_overlay(effect_runtime *runtime)
 	device *const device = runtime->get_device();
 	generic_depth_data &data = runtime->get_private_data<generic_depth_data>();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
+
+	ImGui::Text("Current render pass count: %u", device_data.last_render_pass_count);
+	ImGui::Text("Offset from end of frame to render effects at: %u", device_data.offset_from_last_pass);
+
+	if (device_data.offset_from_last_pass < device_data.last_render_pass_count)
+	{
+		ImGui::SameLine();
+		if (ImGui::SmallButton("+"))
+			device_data.offset_from_last_pass++;
+	}
+
+	if (device_data.offset_from_last_pass != 0)
+	{
+		ImGui::SameLine();
+		if (ImGui::SmallButton("-"))
+			device_data.offset_from_last_pass--;
+	}
 
 	bool force_reset = false;
 
@@ -1224,7 +1542,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 			}
 
 			depth_stencil_backup *const depth_stencil_backup = device_data.find_depth_stencil_backup(item.resource);
-			if (depth_stencil_backup == nullptr || depth_stencil_backup->backup_texture == 0)
+			if (depth_stencil_backup == nullptr)// || depth_stencil_backup->backup_texture == 0)
 				continue;
 
 			for (size_t clear_index = 1; clear_index <= item.snapshot.clears.size(); ++clear_index)
@@ -1248,7 +1566,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 					clear_stats.clear_op == clear_op::fullscreen_draw ? " Fullscreen draw call" : "");
 			}
 
-			/*if (sorted_item_list.size() == 1 && !is_d3d12_or_vulkan)
+			if (sorted_item_list.size() == 1 && !is_d3d12_or_vulkan)
 			{
 				if (bool value = (depth_stencil_backup->force_clear_index == std::numeric_limits<size_t>::max());
 					ImGui::Checkbox("    Choose last clear operation with high number of draw calls", &value))
@@ -1256,7 +1574,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 					depth_stencil_backup->force_clear_index = value ? std::numeric_limits<size_t>::max() : 0;
 					reshade::config_set_value(nullptr, "DEPTH", "DepthCopyAtClearIndex", depth_stencil_backup->force_clear_index);
 				}
-			}*/
+			}
 		}
 	}
 
@@ -1298,6 +1616,58 @@ static void draw_settings_overlay(effect_runtime *runtime)
 	}
 }
 
+// d3d12 / vulkan, but not ogl :G
+// Called after game has rendered a render pass, so check if it makes sense to render effects then (e.g. after main scene rendering, before UI rendering)
+static void on_end_render_pass(command_list* cmd_list)
+{
+	auto& data = cmd_list->get_private_data<command_list_data>();
+
+	if (data.has_multiple_rtvs || data.current_main_rtv == 0)
+		return; // Ignore when game is rendering to multiple render targets simultaneously
+
+	device* const device = cmd_list->get_device();
+	const auto& dev_data = device->get_private_data<generic_depth_device_data>();
+
+	auto& state = cmd_list->get_private_data<state_tracking>();
+
+	uint32_t width, height;
+	dev_data.main_runtime->get_screenshot_width_and_height(&width, &height);
+
+	const resource_desc render_target_desc = device->get_resource_desc(device->get_resource_from_view(data.current_main_rtv));
+
+	if (render_target_desc.texture.width != width || render_target_desc.texture.height != height)
+		return; // Ignore render targets that do not match the effect runtime back buffer dimensions
+
+	//generic_backbuffer_backup *my_backup = dev_data->my_backbuffer_backup;
+	//resource destination = dev_data.my_backbuffer_backup->left_pass_texture_resource;
+
+	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
+	// This is not perfect, since there may be multiple command lists at this will try and render effects in every single one ...
+	if (data.current_render_pass_index++ == (dev_data.last_render_pass_count - dev_data.offset_from_last_pass)) {
+		//dev_data.main_runtime->render_effects(cmd_list, data.current_main_rtv);
+		//device->get_resource_desc(it->first)
+		// TODO: allow setting TWO offsets, one for left eye, one for right eye
+		// TODO: update
+		
+		//cmd_list->copy_resource(render_target_desc, dev_data.my_backbuffer_backup.left_resource_desc);
+		//cmd_list->copy_resource(depth_stencil, destination);
+
+		/*if (!device->create_resource_view(my_backup.left_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+			return;
+
+		if (!device->create_resource_view(my_backup->right_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource_right))
+			return;*/
+	}
+}
+
+static void on_destroy_swapchain(reshade::api::swapchain* swapchain)
+{
+	/*if (global_hook_info == nullptr)
+		return;*/
+
+	capture_impl_free(swapchain);
+}
+
 void register_addon_depth()
 {
 	reshade::register_overlay(nullptr, draw_settings_overlay);
@@ -1333,6 +1703,8 @@ void register_addon_depth()
 	reshade::register_event<reshade::addon_event::reshade_finish_effects>(on_finish_render_effects);
 	// Need to set texture binding again after reloading
 	reshade::register_event<reshade::addon_event::reshade_reloaded_effects>(update_effect_runtime);
+
+	reshade::register_event<reshade::addon_event::destroy_swapchain>(on_destroy_swapchain);
 }
 void unregister_addon_depth()
 {
@@ -1366,6 +1738,8 @@ void unregister_addon_depth()
 	reshade::unregister_event<reshade::addon_event::reshade_begin_effects>(on_begin_render_effects);
 	reshade::unregister_event<reshade::addon_event::reshade_finish_effects>(on_finish_render_effects);
 	reshade::unregister_event<reshade::addon_event::reshade_reloaded_effects>(update_effect_runtime);
+
+	reshade::unregister_event<reshade::addon_event::destroy_swapchain>(on_destroy_swapchain);
 }
 
 extern "C" __declspec(dllexport) const char *NAME = "Citra";
