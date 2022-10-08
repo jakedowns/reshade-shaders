@@ -1,0 +1,67 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1" MembersFormat="NameAndType">
+  <Struct Name="draw_stats">
+    <Position X="13" Y="0.5" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAIAAAAAAQAAAAAAAAAAAAQAAAAAAAACAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="clear_stats">
+    <Position X="13" Y="2.5" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>BAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_info">
+    <Position X="10" Y="1.75" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>BEAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAABA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_hash">
+    <Position X="10" Y="0.5" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="state_tracking">
+    <Position X="3.5" Y="6.25" Width="6.25" />
+    <TypeIdentifier>
+      <HashCode>AAAIAAAEAACBIAABAAAAAAAEAAAAAAAAAAEAAAAIAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="generic_depth_data">
+    <Position X="3.5" Y="3.5" Width="6.25" />
+    <TypeIdentifier>
+      <HashCode>AEAAAAAAAAAAAAAAAAAIAAABAAAoAAABBBAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_backup">
+    <Position X="10" Y="3.75" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAsAAAAgAAAEAAAAAAAAAQAAAABAAAEAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="generic_depth_device_data">
+    <Position X="3.5" Y="0.5" Width="6.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAgAAAAQAAABAAABAIAACAAAAAAAAAABAAQA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Enum Name="clear_op">
+    <Position X="13" Y="4.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAACAAQAAAAAAAAAAAAIAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

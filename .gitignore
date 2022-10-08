@@ -1,0 +1,29 @@
+Citra AddOn/.vs/
+Citra AddOn/intermediate/
+Citra AddOn/bin/
+Citra AddOn/deps/imgui/
+
+# Visual Studio cache files
+*/.vs/
+*/ipch/
+*/packages/
+*.aps
+*.VC.db
+*.VC.opendb
+*.sdf
+*.opensdf
+*.suo
+*.vcxproj.user
+*.Args.json
+*.ArgsCfg.json
+
+# Visual Studio performance profiling
+*.vsp
+*.psess
+
+# Visual Studio Code
+.vscode/
+
+# Temporary OS files
+.DS_Store
+Thumbs.db
