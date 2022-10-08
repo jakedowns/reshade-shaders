@@ -27,6 +27,7 @@ static bool s_disable_intz = false;
 static unsigned int s_preserve_depth_buffers = 1;
 // Enable or disable the aspect ratio check from 'check_aspect_ratio' in the detection heuristic
 static unsigned int s_use_aspect_ratio_heuristics = 0;
+static unsigned int s_do_break_on_clear = 0;
 
 enum class clear_op
 {
@@ -131,6 +132,9 @@ struct __declspec(uuid("7c6363c7-f94e-437a-9160-141782c44a98")) generic_depth_da
 	// This can be created from either the selected depth-stencil resource (if it supports shader access) or from a backup resource
 	resource_view selected_shader_resource = { 0 };
 
+	// secondary shader resource view created from depth_stencil_backup->backup_texture_right
+	resource_view selected_shader_resource_right = { 0 };
+
 	// True when the shader resource view was created from the backup resource, false when it was created from the original depth-stencil
 	bool using_backup_texture = false;
 
@@ -144,6 +148,9 @@ struct depth_stencil_backup
 
 	// A resource used as target for a backup copy of this depth-stencil
 	resource backup_texture = { 0 };
+
+	// secondary texture storage on the same stencil backup
+	resource backup_texture_right = { 0 };
 
 	// The depth-stencil that should be copied from
 	resource depth_stencil_resource = { 0 };
@@ -217,10 +224,30 @@ struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_de
 			}
 		}
 
+		// RIGHT EYE
+		for (auto delayed_destroy_it = delayed_destroy_resources.begin(); delayed_destroy_it != delayed_destroy_resources.end(); ++delayed_destroy_it)
+		{
+			const resource_desc delayed_destroy_desc = device->get_resource_desc(delayed_destroy_it->first);
+
+			if (desc.texture.width == delayed_destroy_desc.texture.width && desc.texture.height == delayed_destroy_desc.texture.height && desc.texture.format == delayed_destroy_desc.texture.format)
+			{
+				backup.backup_texture_right = delayed_destroy_it->first;
+				delayed_destroy_resources.erase(delayed_destroy_it);
+				return &backup;
+			}
+		}
+
+		// LEFT EYE
 		if (device->create_resource(desc, nullptr, resource_usage::copy_dest, &backup.backup_texture))
 			device->set_resource_name(backup.backup_texture, "ReShade depth backup texture");
 		else
-			reshade::log_message(1, "Failed to create backup depth-stencil texture!");
+			reshade::log_message(1, "Failed to create backup depth-stencil texture LEFT!");
+
+		// RIGHT EYE VARIANT
+		if (device->create_resource(desc, nullptr, resource_usage::copy_dest, &backup.backup_texture_right))
+			device->set_resource_name(backup.backup_texture_right, "ReShade depth backup texture RIGHT");
+		else
+			reshade::log_message(1, "Failed to create backup depth-stencil texture RIGHT!");
 
 		return &backup;
 	}
@@ -239,6 +266,13 @@ struct __declspec(uuid("e006e162-33ac-4b9f-b10f-0e15335c7bdb")) generic_depth_de
 			// Do not destroy backup texture immediately since it may still be referenced by a command list that is in flight or was prerecorded
 			// Instead enqueue it for delayed destruction in the future
 			delayed_destroy_resources.emplace_back(backup.backup_texture, 50); // Destroy after 50 frames
+		}
+
+		if (backup.backup_texture_right != 0)
+		{
+			// Do not destroy backup texture immediately since it may still be referenced by a command list that is in flight or was prerecorded
+			// Instead enqueue it for delayed destruction in the future
+			delayed_destroy_resources.emplace_back(backup.backup_texture_right, 50); // Destroy after 50 frames
 		}
 
 		depth_stencil_backups.erase(it);
@@ -276,7 +310,7 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 	device *const device = cmd_list->get_device();
 
 	depth_stencil_backup *const depth_stencil_backup = device->get_private_data<generic_depth_device_data>().find_depth_stencil_backup(depth_stencil);
-	if (depth_stencil_backup == nullptr || depth_stencil_backup->backup_texture == 0)
+	if (depth_stencil_backup == nullptr || depth_stencil_backup->backup_texture == 0 || depth_stencil_backup->backup_texture_right == 0)
 		return;
 
 	bool do_copy = true;
@@ -287,41 +321,55 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 		return;
 
 	// Ignore clears when the last viewport rendered to only affected a small subset of the depth-stencil (fixes flickering in some games)
-	switch (op)
-	{
-	case clear_op::clear_depth_stencil_view:
-		// Mirror's Edge and Portal occasionally render something into a small viewport (16x16 in Mirror's Edge, 512x512 in Portal to render underwater geometry)
-		// DISABLED FOR CITRA which can use buffers as small as 240,400,720,800 wide
-		// do_copy = counters.current_stats.last_viewport.width > 1024 || (counters.current_stats.last_viewport.width == 0 || depth_stencil_backup->frame_width <= 1024);
-		break;
-	case clear_op::fullscreen_draw:
-		// Mass Effect 3 in Mass Effect Legendary Edition sometimes uses a larger common depth buffer for shadow map and scene rendering, where the former uses a 1024x1024 viewport and the latter uses a viewport matching the render resolution
-		do_copy = check_aspect_ratio(counters.current_stats.last_viewport.width, counters.current_stats.last_viewport.height, depth_stencil_backup->frame_width, depth_stencil_backup->frame_height);
-		break;
-	case clear_op::unbind_depth_stencil_view:
-		break;
-	}
+	//switch (op)
+	//{
+	//case clear_op::clear_depth_stencil_view:
+	//	// Mirror's Edge and Portal occasionally render something into a small viewport (16x16 in Mirror's Edge, 512x512 in Portal to render underwater geometry)
+	//	// DISABLED FOR CITRA which can use buffers as small as 240,400,720,800 wide
+	//	// do_copy = counters.current_stats.last_viewport.width > 1024 || (counters.current_stats.last_viewport.width == 0 || depth_stencil_backup->frame_width <= 1024);
+	//	break;
+	//case clear_op::fullscreen_draw:
+	//	// Mass Effect 3 in Mass Effect Legendary Edition sometimes uses a larger common depth buffer for shadow map and scene rendering, where the former uses a 1024x1024 viewport and the latter uses a viewport matching the render resolution
+	//	//do_copy = check_aspect_ratio(counters.current_stats.last_viewport.width, counters.current_stats.last_viewport.height, depth_stencil_backup->frame_width, depth_stencil_backup->frame_height);
+	//	break;
+	//case clear_op::unbind_depth_stencil_view:
+	//	break;
+	//}
+
+	// consider the "copy on clear" buffer the Left eye, since citra games probably draw left before right
+	// TODO: maybe some games do this in reverse, in which case we'll need to add an option to swap L/R but we can do that on the Effect side
+	bool is_left_eye = counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);
+	resource destination = is_left_eye ? depth_stencil_backup->backup_texture : depth_stencil_backup->backup_texture_right;
 
 	if (do_copy)
 	{
 		if (op != clear_op::unbind_depth_stencil_view)
 		{
 			// If clear index override is set to zero, always copy any suitable buffers
-			if (depth_stencil_backup->force_clear_index == 0)
-			{
-				// Use greater equals operator here to handle case where the same scene is first rendered into a shadow map and then for real (e.g. Mirror's Edge main menu)
-				do_copy = counters.current_stats.vertices >= state.best_copy_stats.vertices || (op == clear_op::fullscreen_draw && counters.current_stats.drawcalls >= state.best_copy_stats.drawcalls);
-			}
-			else if (std::numeric_limits<size_t>::max() == depth_stencil_backup->force_clear_index)
-			{
-				// Special case for Garry's Mod which chooses the last clear operation that has a high workload
-				do_copy = counters.current_stats.vertices >= 5000;
-			}
-			else
-			{
+			//if (depth_stencil_backup->force_clear_index == 0)
+			//{
+			//	// Use greater equals operator here to handle case where the same scene is first rendered into a shadow map and then for real (e.g. Mirror's Edge main menu)
+			//	do_copy = counters.current_stats.vertices >= state.best_copy_stats.vertices || (op == clear_op::fullscreen_draw && counters.current_stats.drawcalls >= state.best_copy_stats.drawcalls);
+			//}
+			//else if (std::numeric_limits<size_t>::max() == depth_stencil_backup->force_clear_index)
+			//{
+			//	// Special case for Garry's Mod which chooses the last clear operation that has a high workload
+			//	do_copy = counters.current_stats.vertices >= 5000;
+			//}
+			/*else
+			{*/
 				// This is not really correct, since clears may accumulate over multiple command lists, but it's unlikely that the same depth-stencil is used in more than one
-				do_copy = counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);
-			}
+				// CITRA NOTE: "but it's unlikely that the same depth-stencil is used in more than one" this is NOT TRUE for Citra emulator
+				// as far as i can tell, all the games i've tested so far use the SAME depth-stencil for Left/Right eye to save memory
+				// first drawing left, then clearing and drawing right
+			//	do_copy = counters.clears.size() == (depth_stencil_backup->force_clear_index - 1);
+			//}
+
+			// CITRA VERSION
+			/*if (counters.current_stats.vertices < 10) {
+				do_copy = false;
+			}*/
+			do_copy = true; // just... always copy
 
 			counters.clears.push_back({ counters.current_stats, op, do_copy });
 		}
@@ -331,9 +379,11 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 		{
 			state.best_copy_stats = counters.current_stats;
 
+			
+
 			// A resource has to be in this state for a clear operation, so can assume it here
 			cmd_list->barrier(depth_stencil, resource_usage::depth_stencil_write, resource_usage::copy_source);
-			cmd_list->copy_resource(depth_stencil, depth_stencil_backup->backup_texture);
+			cmd_list->copy_resource(depth_stencil, destination); // copy to backup_texture || backup_texture_right
 			cmd_list->barrier(depth_stencil, resource_usage::copy_source, resource_usage::depth_stencil_write);
 
 			counters.copied_during_frame = true;
@@ -349,6 +399,8 @@ static void update_effect_runtime(effect_runtime *runtime)
 	const generic_depth_data &instance = runtime->get_private_data<generic_depth_data>();
 
 	runtime->update_texture_bindings("ORIG_DEPTH", instance.selected_shader_resource);
+	// ORIG_DEPTH_RIGHT
+	runtime->update_texture_bindings("ORIG_DEPTH_2", instance.selected_shader_resource_right);
 
 	runtime->enumerate_uniform_variables(nullptr, [&instance](effect_runtime *runtime, auto variable) {
 		char source[32] = "";
@@ -371,6 +423,7 @@ static void on_init_device(device *device)
 	reshade::config_get_value(nullptr, "DEPTH", "DisableINTZ", s_disable_intz);
 	reshade::config_get_value(nullptr, "DEPTH", "DepthCopyBeforeClears", s_preserve_depth_buffers);
 	reshade::config_get_value(nullptr, "DEPTH", "UseAspectRatioHeuristics", s_use_aspect_ratio_heuristics);
+	reshade::config_get_value(nullptr, "DEPTH", "DoBreakOnClear", s_do_break_on_clear);
 }
 static void on_init_command_list(command_list *cmd_list)
 {
@@ -426,6 +479,9 @@ static void on_destroy_effect_runtime(effect_runtime *runtime)
 
 	if (data.selected_shader_resource != 0)
 		device->destroy_resource_view(data.selected_shader_resource);
+
+	if (data.selected_shader_resource_right != 0)
+		device->destroy_resource_view(data.selected_shader_resource_right);
 
 	runtime->destroy_private_data<generic_depth_data>();
 }
@@ -547,11 +603,12 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 
 	// Check if this draw call likely represets a fullscreen rectangle (two triangles), which would clear the depth-stencil
 	const bool fullscreen_draw = vertices == 6 && instances == 1;
-	if (fullscreen_draw &&
-		s_preserve_depth_buffers == 2 &&
-		state.first_draw_since_bind &&
+	if (fullscreen_draw //&&
+		//s_preserve_depth_buffers == 2 &&
+		//state.first_draw_since_bind //&&
 		// But ignore that in Vulkan (since it is invalid to copy a resource inside an active render pass)
-		cmd_list->get_device()->get_api() != device_api::vulkan)
+		//cmd_list->get_device()->get_api() != device_api::vulkan
+		)
 		on_clear_depth_impl(cmd_list, state, state.current_depth_stencil, clear_op::fullscreen_draw);
 
 	state.first_draw_since_bind = false;
@@ -703,7 +760,10 @@ static void on_present(command_queue *, swapchain *swapchain, const rect *, cons
 		return;
 
 	// Also skip update when there has been very little activity (special case for emulators like PCSX2 which may present more often than they render a frame)
-	if (queue_state.counters_per_used_depth_stencil.size() == 1 && queue_state.counters_per_used_depth_stencil.begin()->second.total_stats.drawcalls <= 8)
+	// CITRA NOTE we might want to remove this. in order to get all our buffers, maybe we WANT to catch presents with few draw calls
+	// OR: maybe we RAISE the limiter above 8 to correctly filter out things like the EXTRA BACKUP ITEM bug in Super Mario 3D Land, where having a backup item takes over the depth buffer
+	size_t drawcalls = queue_state.counters_per_used_depth_stencil.begin()->second.total_stats.drawcalls;
+	if (queue_state.counters_per_used_depth_stencil.size() == 1 && drawcalls <= 8)
 		return;
 
 	device_data.current_depth_stencil_list.clear();
@@ -752,6 +812,10 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 	resource_desc best_match_desc;
 	const depth_stencil_info *best_snapshot = nullptr;
 
+	//resource best_match_right_eye = { 0 };
+	//resource_desc match_desc_right_eye;
+	//const depth_stencil_info* best_snapshot_right_eye = nullptr;
+
 	uint32_t frame_width, frame_height;
 	runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
 
@@ -766,8 +830,8 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 		if (desc.texture.samples > 1)
 			continue; // Ignore MSAA textures, since they would need to be resolved first
 
-		if (s_use_aspect_ratio_heuristics && !check_aspect_ratio(static_cast<float>(desc.texture.width), static_cast<float>(desc.texture.height), frame_width, frame_height))
-			continue; // Not a good fit
+		//if (s_use_aspect_ratio_heuristics && !check_aspect_ratio(static_cast<float>(desc.texture.width), static_cast<float>(desc.texture.height), frame_width, frame_height))
+		//	continue; // Not a good fit
 
 		if (best_snapshot == nullptr || (snapshot.total_stats.drawcalls_indirect < (snapshot.total_stats.drawcalls / 3) ?
 			// Choose snapshot with the most vertices, since that is likely to contain the main scene
@@ -783,8 +847,11 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 
 	if (data.override_depth_stencil != 0)
 	{
-		const auto it = std::find_if(current_depth_stencil_list.begin(), current_depth_stencil_list.end(),
+		const auto it = std::find_if(
+			current_depth_stencil_list.begin(), 
+			current_depth_stencil_list.end(),
 			[resource = data.override_depth_stencil](const auto &current) { return current.first == resource; });
+
 		if (it != current_depth_stencil_list.end())
 		{
 			best_match = it->first;
@@ -799,6 +866,7 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 
 		depth_stencil_backup *depth_stencil_backup = device_data.find_depth_stencil_backup(best_match);
 
+		// if it changed or it was never set
 		if (best_match != data.selected_depth_stencil || data.selected_shader_resource == 0 || (s_preserve_depth_buffers && depth_stencil_backup == nullptr))
 		{
 			// Destroy previous resource view, since the underlying resource has changed
@@ -807,24 +875,37 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
 				device->destroy_resource_view(data.selected_shader_resource);
 
+				//device_data.untrack_depth_stencil(data.selected_depth_stencil);
+			}
+
+			if (data.selected_shader_resource_right != 0)
+			{
+				runtime->get_command_queue()->wait_idle(); // Ensure resource view is no longer in-use before destroying it
+				device->destroy_resource_view(data.selected_shader_resource_right);
+
 				device_data.untrack_depth_stencil(data.selected_depth_stencil);
 			}
 
 			data.using_backup_texture = false;
 			data.selected_depth_stencil = best_match;
 			data.selected_shader_resource = { 0 };
+			data.selected_shader_resource_right = { 0 };
 
 			// Create two-dimensional resource view to the first level and layer of the depth-stencil resource
-			resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(best_match_desc.texture.format) : best_match_desc.texture.format);
+			//resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(best_match_desc.texture.format) : best_match_desc.texture.format);
+			resource_view_desc srv_desc(best_match_desc.texture.format);
 
 			// Need to create backup texture only if doing backup copies or original resource does not support shader access (which is necessary for binding it to effects)
 			// Also always create a backup texture in D3D12 or Vulkan to circument problems in case application makes use of resource aliasing
-			if (s_preserve_depth_buffers || (best_match_desc.usage & resource_usage::shader_resource) == 0 || (api == device_api::d3d12 || api == device_api::vulkan))
-			{
+			//if (true) //s_preserve_depth_buffers || (best_match_desc.usage & resource_usage::shader_resource) == 0 || (api == device_api::d3d12 || api == device_api::vulkan))
+			//{
 				depth_stencil_backup = device_data.track_depth_stencil_for_backup(device, best_match, best_match_desc);
 
 				// Abort in case backup texture creation failed
 				if (depth_stencil_backup->backup_texture == 0)
+					return;
+
+				if (depth_stencil_backup->backup_texture_right == 0)
 					return;
 
 				depth_stencil_backup->frame_width = frame_width;
@@ -835,19 +916,28 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 				else
 					depth_stencil_backup->force_clear_index = 0;
 
-				if (api == device_api::d3d9)
-					srv_desc.format = format::r32_float; // Same format as backup texture, as set in 'track_depth_stencil_for_backup'
+				//if (api == device_api::d3d9)
+				//	srv_desc.format = format::r32_float; // Same format as backup texture, as set in 'track_depth_stencil_for_backup'
+
+				//if (!device->create_resource_view(depth_stencil_backup->backup_texture, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+				//	return;
+
+				data.using_backup_texture = true;
 
 				if (!device->create_resource_view(depth_stencil_backup->backup_texture, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
 					return;
 
-				data.using_backup_texture = true;
-			}
-			else
-			{
-				if (!device->create_resource_view(best_match, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+				if (!device->create_resource_view(depth_stencil_backup->backup_texture_right, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource_right))
 					return;
-			}
+
+				//data.using_backup_texture = true;
+			//}
+			// CITRA - this code path should never run cause we ALWAYS preserve_depth_buffers
+			// else
+			// {
+			// 	if (!device->create_resource_view(best_match, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+			// 		return;
+			// }
 
 			update_effect_runtime(runtime);
 		}
@@ -856,6 +946,7 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 		{
 			assert(depth_stencil_backup != nullptr && depth_stencil_backup->backup_texture != 0 && best_snapshot != nullptr);
 			const resource backup_texture = depth_stencil_backup->backup_texture;
+			const resource backup_texture_right = depth_stencil_backup->backup_texture_right;
 
 			// Copy to backup texture unless already copied during the current frame
 			if (!best_snapshot->copied_during_frame && (best_match_desc.usage & resource_usage::copy_source) != 0)
@@ -877,18 +968,39 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 				cmd_list->barrier(best_match, old_state, resource_usage::copy_source);
 				cmd_list->copy_resource(best_match, backup_texture);
 				cmd_list->barrier(best_match, resource_usage::copy_source, old_state);
+
+				cmd_list->barrier(best_match, old_state, resource_usage::copy_source);
+				cmd_list->copy_resource(best_match, backup_texture_right);
+				cmd_list->barrier(best_match, resource_usage::copy_source, old_state);
 			}
 
 			cmd_list->barrier(backup_texture, resource_usage::copy_dest, resource_usage::shader_resource);
+
+			cmd_list->barrier(backup_texture_right, resource_usage::copy_dest, resource_usage::shader_resource);
 		}
-		else
-		{
+
+		// Citra Change: note: this used to be if/else
+		// i'm changing it to ALWAYS copy the selected override clear pass for the stencil AND the final output of the stencil
+		// we want to bind left and right eye z-depth passes to shader land
+		// NOTE/TODO: for some games, we _might_ want the "other" pass to be a *different* clear pass, or even a *different* stencil's final||specific clear pass
+		// we might also need the flexibility for a DYNAMIC/Auto "best" clear pass with most verticies or something like that
+		// for now, i'm just trying to get the basics working, which is, copying TWO buffer snapshots and binding them
+		// once that's working, i can get more fancy with cloning / assigning what is Left vs. Right from different combinations of Stencil+Pass combinations / definitions.
+		// SO; right now i'm just testing, IF i call cmd_list->barrier twice, can i then fetch & bind the resources? or does calling it twice just clobber the memory?
+		// IF it just clobbers it, how can I reserve a space in linear memory for the ADDITIONAL z-buffer?
+		// I know for a fact that Geo3D for example, uses alternating frames in order to handle his left/right z-passes
+		// where as I want to handle them simultaneously with each frame, not in alternating frames.
+		// Citra makes them both available by RE-WRITING to the same stencil, 
+		// SO, in theory, I should be able to copy on Clear and copy on Final (or another Clear on the same stencil / final or clear on a different stencil depending on the game) THEN, if i just bind that memory to ORIG_DEPTH_LEFT and ORIG_DEPTH_RIGHT
+		// my Effects/Shaders should be able to display Side-by-Side depth data
+		//else
+		//{
 			// Unset current depth-stencil view, in case it is bound to an effect as a shader resource (which will fail if it is still bound on output)
-			if (api <= device_api::d3d11)
+			/*if (api <= device_api::d3d11)
 				cmd_list->bind_render_targets_and_depth_stencil(0, nullptr);
 
-			cmd_list->barrier(best_match, resource_usage::depth_stencil | resource_usage::shader_resource, resource_usage::shader_resource);
-		}
+			cmd_list->barrier(best_match, resource_usage::depth_stencil | resource_usage::shader_resource, resource_usage::shader_resource);*/
+		//}
 	}
 	else
 	{
@@ -921,6 +1033,9 @@ static void on_finish_render_effects(effect_runtime *runtime, command_list *cmd_
 		{
 			const resource backup_texture = runtime->get_device()->get_resource_from_view(data.selected_shader_resource);
 			cmd_list->barrier(backup_texture, resource_usage::shader_resource, resource_usage::copy_dest);
+
+			const resource backup_texture_right = runtime->get_device()->get_resource_from_view(data.selected_shader_resource_right);
+			cmd_list->barrier(backup_texture_right, resource_usage::shader_resource, resource_usage::copy_dest);
 		}
 		else
 		{
@@ -964,15 +1079,23 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 	bool force_reset = false;
 
-	if (bool use_aspect_ratio_heuristics = s_use_aspect_ratio_heuristics != 0;
+	if (bool do_break_on_clear = s_do_break_on_clear != 0;
+		ImGui::Checkbox("Do Break On Clear", &do_break_on_clear)
+		)
+	{
+		s_do_break_on_clear = do_break_on_clear ? 1 : 0;
+		reshade::config_set_value(nullptr, "DEPTH", "DoBreakOnClear", s_do_break_on_clear);
+	}
+
+	/*if (bool use_aspect_ratio_heuristics = s_use_aspect_ratio_heuristics != 0;
 		ImGui::Checkbox("Use aspect ratio heuristics", &use_aspect_ratio_heuristics))
 	{
 		s_use_aspect_ratio_heuristics = use_aspect_ratio_heuristics ? 1 : 0;
 		reshade::config_set_value(nullptr, "DEPTH", "UseAspectRatioHeuristics", s_use_aspect_ratio_heuristics);
 		force_reset = true;
-	}
+	}*/
 
-	if (s_use_aspect_ratio_heuristics)
+	/*if (s_use_aspect_ratio_heuristics)
 	{
 		if (bool use_aspect_ratio_heuristics_ex = s_use_aspect_ratio_heuristics == 2;
 			ImGui::Checkbox("Use extended aspect ratio heuristics (for DLSS or resolution scaling)", &use_aspect_ratio_heuristics_ex))
@@ -981,8 +1104,9 @@ static void draw_settings_overlay(effect_runtime *runtime)
 			reshade::config_set_value(nullptr, "DEPTH", "UseAspectRatioHeuristics", s_use_aspect_ratio_heuristics);
 			force_reset = true;
 		}
-	}
+	}*/
 
+	// CITRA - disabling this as an option. we _always_ want to do this. (bringing back temporarily to test using it as a jogger)
 	if (bool copy_before_clear_operations = s_preserve_depth_buffers != 0;
 		ImGui::Checkbox("Copy depth buffer before clear operations", &copy_before_clear_operations))
 	{
@@ -993,6 +1117,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 	const bool is_d3d12_or_vulkan = device->get_api() == device_api::d3d12 || device->get_api() == device_api::vulkan;
 
+	// CITRA - do we need this option?
 	if (s_preserve_depth_buffers || is_d3d12_or_vulkan)
 	{
 		if (bool copy_before_fullscreen_draws = s_preserve_depth_buffers == 2;
@@ -1123,7 +1248,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 					clear_stats.clear_op == clear_op::fullscreen_draw ? " Fullscreen draw call" : "");
 			}
 
-			if (sorted_item_list.size() == 1 && !is_d3d12_or_vulkan)
+			/*if (sorted_item_list.size() == 1 && !is_d3d12_or_vulkan)
 			{
 				if (bool value = (depth_stencil_backup->force_clear_index == std::numeric_limits<size_t>::max());
 					ImGui::Checkbox("    Choose last clear operation with high number of draw calls", &value))
@@ -1131,7 +1256,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 					depth_stencil_backup->force_clear_index = value ? std::numeric_limits<size_t>::max() : 0;
 					reshade::config_set_value(nullptr, "DEPTH", "DepthCopyAtClearIndex", depth_stencil_backup->force_clear_index);
 				}
-			}
+			}*/
 		}
 	}
 
@@ -1159,6 +1284,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 			queue->wait_idle(); // Ensure resource view is no longer in-use before destroying it
 			device->destroy_resource_view(data.selected_shader_resource);
+			device->destroy_resource_view(data.selected_shader_resource_right);
 
 			device_data.untrack_depth_stencil(data.selected_depth_stencil);
 		}
@@ -1166,6 +1292,7 @@ static void draw_settings_overlay(effect_runtime *runtime)
 		data.using_backup_texture = false;
 		data.selected_depth_stencil = { 0 };
 		data.selected_shader_resource = { 0 };
+		data.selected_shader_resource_right = { 0 };
 
 		update_effect_runtime(runtime);
 	}
