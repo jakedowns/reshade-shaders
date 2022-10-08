@@ -87,31 +87,31 @@ struct shtex_data
 
 //extern hook_info* global_hook_info;
 
-extern void shmem_copy_data(size_t idx, void* volatile data);
-extern bool shmem_texture_data_lock(int idx);
-extern void shmem_texture_data_unlock(int idx);
+//extern void shmem_copy_data(size_t idx, void* volatile data);
+//extern bool shmem_texture_data_lock(int idx);
+//extern void shmem_texture_data_unlock(int idx);
 
 bool hook_init();
 void hook_free();
 
-bool capture_init_shtex(shtex_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t format, bool flip, uintptr_t handle);
-bool capture_init_shmem(shmem_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t pitch, uint32_t format, bool flip);
+//bool capture_init_shtex(shtex_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t format, bool flip, uintptr_t handle);
+//bool capture_init_shmem(shmem_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t pitch, uint32_t format, bool flip);
 void capture_free();
 
-bool capture_ready();
-bool capture_alive();
-bool capture_active();
-bool capture_stopped();
-bool capture_restarted();
+//bool capture_ready();
+//bool capture_alive();
+//bool capture_active();
+//bool capture_stopped();
+//bool capture_restarted();
 
-bool capture_signal_ready();
-bool capture_signal_restart();
+//bool capture_signal_ready();
+//bool capture_signal_restart();
 
-inline bool capture_should_stop()
-{
-	return capture_active() && capture_stopped() && !capture_alive();
-}
-inline bool capture_should_init()
-{
-	return !capture_active() && capture_restarted() && capture_alive();
-}
+//inline bool capture_should_stop()
+//{
+//	return capture_active() && capture_stopped() && !capture_alive();
+//}
+//inline bool capture_should_init()
+//{
+//	return !capture_active() && capture_restarted() && capture_alive();
+//}

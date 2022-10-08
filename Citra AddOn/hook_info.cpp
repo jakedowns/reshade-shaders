@@ -144,10 +144,10 @@ bool hook_init()
 	if (!create_mutex(tex_mutexes[1], MUTEX_TEXTURE2, pid))
 		return false;
 
-	if (!create_file_mapping(filemap_hook_info, reinterpret_cast<void*&>(global_hook_info), sizeof(hook_info), SHMEM_HOOK_INFO L"%lu", pid))
-		return false;
+	/*if (!create_file_mapping(filemap_hook_info, reinterpret_cast<void*&>(global_hook_info), sizeof(hook_info), SHMEM_HOOK_INFO L"%lu", pid))
+		return false;*/
 
-	capture_signal_restart();
+	//capture_signal_restart();
 
 	return true;
 }
@@ -157,7 +157,7 @@ void hook_free()
 	if (!dup_hook_mutex)
 		return;
 
-	destroy_file_mapping(filemap_hook_info, reinterpret_cast<void*&>(global_hook_info));
+	//destroy_file_mapping(filemap_hook_info, reinterpret_cast<void*&>(global_hook_info));
 
 	destroy_mutex(tex_mutexes[1]);
 	destroy_mutex(tex_mutexes[0]);
@@ -276,98 +276,98 @@ void shmem_texture_data_unlock(int idx)
 	LeaveCriticalSection(&thread_data.mutexes[idx]);
 }
 
-bool capture_init_shtex(shtex_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t format, bool flip, uintptr_t handle)
-{
-	const HWND root_window = GetAncestor(static_cast<HWND>(window), GA_ROOT);
-	if (!create_file_mapping(shmem_file_handle, shmem_info, sizeof(shtex_data), SHMEM_TEXTURE "_%llu_%u", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(root_window)), ++shmem_id_counter))
-		return false;
+//bool capture_init_shtex(shtex_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t format, bool flip, uintptr_t handle)
+//{
+//	const HWND root_window = GetAncestor(static_cast<HWND>(window), GA_ROOT);
+//	if (!create_file_mapping(shmem_file_handle, shmem_info, sizeof(shtex_data), SHMEM_TEXTURE "_%llu_%u", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(root_window)), ++shmem_id_counter))
+//		return false;
+//
+//	data = static_cast<shtex_data*>(shmem_info);
+//	data->tex_handle = static_cast<uint32_t>(handle);
+//
+//	/*global_hook_info->hook_ver_major = HOOK_VER_MAJOR;
+//	global_hook_info->hook_ver_minor = HOOK_VER_MINOR;
+//	global_hook_info->window = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(window));
+//	global_hook_info->type = CAPTURE_TYPE_TEXTURE;
+//	global_hook_info->format = format;
+//	global_hook_info->flip = flip;
+//	global_hook_info->map_id = shmem_id_counter;
+//	global_hook_info->map_size = sizeof(shtex_data);
+//	global_hook_info->cx = cx;
+//	global_hook_info->cy = cy;
+//	global_hook_info->UNUSED_base_cx = cx;
+//	global_hook_info->UNUSED_base_cy = cy;*/
+//
+//	/*if (!capture_signal_ready())
+//		return false;*/
+//	return active = true;
+//}
 
-	data = static_cast<shtex_data*>(shmem_info);
-	data->tex_handle = static_cast<uint32_t>(handle);
-
-	global_hook_info->hook_ver_major = HOOK_VER_MAJOR;
-	global_hook_info->hook_ver_minor = HOOK_VER_MINOR;
-	global_hook_info->window = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(window));
-	global_hook_info->type = CAPTURE_TYPE_TEXTURE;
-	global_hook_info->format = format;
-	global_hook_info->flip = flip;
-	global_hook_info->map_id = shmem_id_counter;
-	global_hook_info->map_size = sizeof(shtex_data);
-	global_hook_info->cx = cx;
-	global_hook_info->cy = cy;
-	global_hook_info->UNUSED_base_cx = cx;
-	global_hook_info->UNUSED_base_cy = cy;
-
-	if (!capture_signal_ready())
-		return false;
-	return active = true;
-}
-
-bool capture_init_shmem(shmem_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t pitch, uint32_t format, bool flip)
-{
-	uint32_t tex_size = cy * pitch;
-	uint32_t aligned_header = (sizeof(shmem_data) + (32 - 1)) & ~(32 - 1);
-	uint32_t aligned_tex = (tex_size + (32 - 1)) & ~(32 - 1);
-	uint32_t total_size = aligned_header + aligned_tex * 2 + 32;
-
-	const HWND root_window = GetAncestor(static_cast<HWND>(window), GA_ROOT);
-	if (!create_file_mapping(shmem_file_handle, shmem_info, total_size, SHMEM_TEXTURE "_%llu_%u", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(root_window)), ++shmem_id_counter))
-		return false;
-
-	data = static_cast<shmem_data*>(shmem_info);
-
-	// To ensure fast copy rate, align texture data to 256 bit addresses
-	uintptr_t align_pos = reinterpret_cast<uintptr_t>(shmem_info);
-	align_pos += aligned_header;
-	align_pos &= ~(32 - 1);
-	align_pos -= reinterpret_cast<uintptr_t>(shmem_info);
-
-	if (align_pos < sizeof(shmem_data))
-		align_pos += 32;
-
-	data->last_tex = -1;
-	data->tex1_offset = static_cast<uint32_t>(align_pos);
-	data->tex2_offset = data->tex1_offset + aligned_tex;
-
-	global_hook_info->hook_ver_major = HOOK_VER_MAJOR;
-	global_hook_info->hook_ver_minor = HOOK_VER_MINOR;
-	global_hook_info->window = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(window));
-	global_hook_info->type = CAPTURE_TYPE_MEMORY;
-	global_hook_info->format = format;
-	global_hook_info->flip = flip;
-	global_hook_info->map_id = shmem_id_counter;
-	global_hook_info->map_size = total_size;
-	global_hook_info->pitch = pitch;
-	global_hook_info->cx = cx;
-	global_hook_info->cy = cy;
-	global_hook_info->UNUSED_base_cx = cx;
-	global_hook_info->UNUSED_base_cy = cy;
-
-	thread_data.pitch = pitch;
-	thread_data.cy = cy;
-	thread_data.shmem_textures[0] = reinterpret_cast<uint8_t*>(data) + data->tex1_offset;
-	thread_data.shmem_textures[1] = reinterpret_cast<uint8_t*>(data) + data->tex2_offset;
-
-	thread_data.copy_event = CreateEvent(nullptr, false, false, nullptr);
-	if (!thread_data.copy_event)
-		return false;
-
-	thread_data.stop_event = CreateEvent(nullptr, true, false, nullptr);
-	if (!thread_data.stop_event)
-		return false;
-
-	for (int i = 0; i < NUM_BUFFERS; i++)
-		InitializeCriticalSection(&thread_data.mutexes[i]);
-	InitializeCriticalSection(&thread_data.data_mutex);
-
-	thread_data.copy_thread = CreateThread(nullptr, 0, copy_thread, nullptr, 0, nullptr);
-	if (!thread_data.copy_thread)
-		return false;
-
-	if (!capture_signal_ready())
-		return false;
-	return active = true;
-}
+//bool capture_init_shmem(shmem_data*& data, void* window, uint32_t cx, uint32_t cy, uint32_t pitch, uint32_t format, bool flip)
+//{
+//	uint32_t tex_size = cy * pitch;
+//	uint32_t aligned_header = (sizeof(shmem_data) + (32 - 1)) & ~(32 - 1);
+//	uint32_t aligned_tex = (tex_size + (32 - 1)) & ~(32 - 1);
+//	uint32_t total_size = aligned_header + aligned_tex * 2 + 32;
+//
+//	const HWND root_window = GetAncestor(static_cast<HWND>(window), GA_ROOT);
+//	if (!create_file_mapping(shmem_file_handle, shmem_info, total_size, SHMEM_TEXTURE "_%llu_%u", static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(root_window)), ++shmem_id_counter))
+//		return false;
+//
+//	data = static_cast<shmem_data*>(shmem_info);
+//
+//	// To ensure fast copy rate, align texture data to 256 bit addresses
+//	uintptr_t align_pos = reinterpret_cast<uintptr_t>(shmem_info);
+//	align_pos += aligned_header;
+//	align_pos &= ~(32 - 1);
+//	align_pos -= reinterpret_cast<uintptr_t>(shmem_info);
+//
+//	if (align_pos < sizeof(shmem_data))
+//		align_pos += 32;
+//
+//	data->last_tex = -1;
+//	data->tex1_offset = static_cast<uint32_t>(align_pos);
+//	data->tex2_offset = data->tex1_offset + aligned_tex;
+//
+//	/*global_hook_info->hook_ver_major = HOOK_VER_MAJOR;
+//	global_hook_info->hook_ver_minor = HOOK_VER_MINOR;
+//	global_hook_info->window = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(window));
+//	global_hook_info->type = CAPTURE_TYPE_MEMORY;
+//	global_hook_info->format = format;
+//	global_hook_info->flip = flip;
+//	global_hook_info->map_id = shmem_id_counter;
+//	global_hook_info->map_size = total_size;
+//	global_hook_info->pitch = pitch;
+//	global_hook_info->cx = cx;
+//	global_hook_info->cy = cy;
+//	global_hook_info->UNUSED_base_cx = cx;
+//	global_hook_info->UNUSED_base_cy = cy;*/
+//
+//	thread_data.pitch = pitch;
+//	thread_data.cy = cy;
+//	thread_data.shmem_textures[0] = reinterpret_cast<uint8_t*>(data) + data->tex1_offset;
+//	thread_data.shmem_textures[1] = reinterpret_cast<uint8_t*>(data) + data->tex2_offset;
+//
+//	thread_data.copy_event = CreateEvent(nullptr, false, false, nullptr);
+//	if (!thread_data.copy_event)
+//		return false;
+//
+//	thread_data.stop_event = CreateEvent(nullptr, true, false, nullptr);
+//	if (!thread_data.stop_event)
+//		return false;
+//
+//	for (int i = 0; i < NUM_BUFFERS; i++)
+//		InitializeCriticalSection(&thread_data.mutexes[i]);
+//	InitializeCriticalSection(&thread_data.data_mutex);
+//
+//	thread_data.copy_thread = CreateThread(nullptr, 0, copy_thread, nullptr, 0, nullptr);
+//	if (!thread_data.copy_thread)
+//		return false;
+//
+//	if (!capture_signal_ready())
+//		return false;
+//	return active = true;
+//}
 
 void capture_free()
 {
@@ -388,64 +388,64 @@ void capture_free()
 
 	memset(&thread_data, 0, sizeof(thread_data));
 
-	destroy_file_mapping(shmem_file_handle, shmem_info);
+	//destroy_file_mapping(shmem_file_handle, shmem_info);
 
-	capture_signal_restart();
+	//capture_signal_restart();
 	active = false;
 }
 
-bool capture_ready()
-{
-	if (!capture_active())
-		return false;
+//bool capture_ready()
+//{
+//	if (!capture_active())
+//		return false;
+//
+//	if (!global_hook_info->frame_interval)
+//		return true;
+//
+//	static std::chrono::high_resolution_clock::time_point last_time;
+//	const auto t = std::chrono::high_resolution_clock::now();
+//	const auto elapsed = t - last_time;
+//
+//	if (elapsed < std::chrono::nanoseconds(global_hook_info->frame_interval))
+//		return false;
+//
+//	last_time = (elapsed > std::chrono::nanoseconds(global_hook_info->frame_interval * 2)) ? t : last_time + std::chrono::nanoseconds(global_hook_info->frame_interval);
+//	return true;
+//}
 
-	if (!global_hook_info->frame_interval)
-		return true;
+//bool capture_alive()
+//{
+//	HANDLE handle;
+//	if (open_mutex(handle, WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId()))
+//	{
+//		destroy_mutex(handle);
+//		return true;
+//	}
+//
+//	return false;
+//}
 
-	static std::chrono::high_resolution_clock::time_point last_time;
-	const auto t = std::chrono::high_resolution_clock::now();
-	const auto elapsed = t - last_time;
+//bool capture_active()
+//{
+//	return active;
+//}
 
-	if (elapsed < std::chrono::nanoseconds(global_hook_info->frame_interval))
-		return false;
+//bool capture_stopped()
+//{
+//	return WaitForSingleObject(signal_stop, 0) == WAIT_OBJECT_0;
+//}
 
-	last_time = (elapsed > std::chrono::nanoseconds(global_hook_info->frame_interval * 2)) ? t : last_time + std::chrono::nanoseconds(global_hook_info->frame_interval);
-	return true;
-}
+//bool capture_restarted()
+//{
+//	return WaitForSingleObject(signal_restart, 0) == WAIT_OBJECT_0;
+//}
 
-bool capture_alive()
-{
-	HANDLE handle;
-	if (open_mutex(handle, WINDOW_HOOK_KEEPALIVE, GetCurrentProcessId()))
-	{
-		destroy_mutex(handle);
-		return true;
-	}
+//bool capture_signal_ready()
+//{
+//	return SetEvent(signal_ready) != FALSE;
+//}
 
-	return false;
-}
-
-bool capture_active()
-{
-	return active;
-}
-
-bool capture_stopped()
-{
-	return WaitForSingleObject(signal_stop, 0) == WAIT_OBJECT_0;
-}
-
-bool capture_restarted()
-{
-	return WaitForSingleObject(signal_restart, 0) == WAIT_OBJECT_0;
-}
-
-bool capture_signal_ready()
-{
-	return SetEvent(signal_ready) != FALSE;
-}
-
-bool capture_signal_restart()
-{
-	return SetEvent(signal_restart) != FALSE;
-}
+//bool capture_signal_restart()
+//{
+//	return SetEvent(signal_restart) != FALSE;
+//}

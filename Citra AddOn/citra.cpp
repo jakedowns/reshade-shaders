@@ -14,6 +14,7 @@
 #include <reshade.hpp>
 #include "hook_info.hpp"
 #include <cmath>
+#include <cassert>
 #include <cstring>
 #include <algorithm>
 #include <vector>
@@ -30,6 +31,12 @@ static unsigned int s_preserve_depth_buffers = 2;
 // Enable or disable the aspect ratio check from 'check_aspect_ratio' in the detection heuristic
 static unsigned int s_use_aspect_ratio_heuristics = 0;
 static unsigned int s_do_break_on_clear = 0;
+
+struct __declspec(uuid("0D7525F9-C4E1-426E-BC99-15BBD5FD51F2")) user_data
+{
+
+	reshade::api::resource host_resource = { 0 };
+};
 
 enum class clear_op
 {
@@ -850,45 +857,27 @@ static bool capture_impl_init(reshade::api::swapchain* swapchain)
 	data.cx = desc.texture.width;
 	data.cy = desc.texture.height;
 
-	/*if (device->get_api() != reshade::api::device_api::opengl)
+	data.using_shtex = false;
+
+	for (int i = 0; i < NUM_BUFFERS; i++)
 	{
-		data.using_shtex = true;
-
 		if (!device->create_resource(
-			reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_only, reshade::api::resource_usage::shader_resource | reshade::api::resource_usage::copy_dest, reshade::api::resource_flags::shared),
+			reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_to_cpu, reshade::api::resource_usage::copy_dest),
 			nullptr,
-			reshade::api::resource_usage::copy_dest,
-			&data.shtex.texture,
-			&data.shtex.handle))
-			return false;
-
-		if (!capture_init_shtex(data.shtex.shtex_info, swapchain->get_hwnd(), data.cx, data.cy, static_cast<uint32_t>(data.format), false, (uintptr_t)data.shtex.handle))
+			reshade::api::resource_usage::cpu_access,
+			&data.shmem.copy_surfaces[i]))
 			return false;
 	}
-	else
-	{*/
-		data.using_shtex = false;
 
-		for (int i = 0; i < NUM_BUFFERS; i++)
-		{
-			if (!device->create_resource(
-				reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_to_cpu, reshade::api::resource_usage::copy_dest),
-				nullptr,
-				reshade::api::resource_usage::cpu_access,
-				&data.shmem.copy_surfaces[i]))
-				return false;
-		}
+	reshade::api::subresource_data mapped;
+	if (device->map_texture_region(data.shmem.copy_surfaces[0], 0, nullptr, reshade::api::map_access::read_only, &mapped))
+	{
+		data.shmem.pitch = mapped.row_pitch;
+		device->unmap_texture_region(data.shmem.copy_surfaces[0], 0);
+	}
 
-		reshade::api::subresource_data mapped;
-		if (device->map_texture_region(data.shmem.copy_surfaces[0], 0, nullptr, reshade::api::map_access::read_only, &mapped))
-		{
-			data.shmem.pitch = mapped.row_pitch;
-			device->unmap_texture_region(data.shmem.copy_surfaces[0], 0);
-		}
-
-		if (!capture_init_shmem(data.shmem.shmem_info, swapchain->get_hwnd(), data.cx, data.cy, data.shmem.pitch, static_cast<uint32_t>(data.format), false))
-			return false;
-	//}
+	/*if (!capture_init_shmem(data.shmem.shmem_info, swapchain->get_hwnd(), data.cx, data.cy, data.shmem.pitch, static_cast<uint32_t>(data.format), false))
+		return false;*/
 
 	return true;
 }
@@ -956,7 +945,7 @@ static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api:
 		if (device->map_texture_region(data.shmem.copy_surfaces[next_tex], 0, nullptr, reshade::api::map_access::read_only, &mapped))
 		{
 			data.shmem.texture_mapped[next_tex] = true;
-			shmem_copy_data(next_tex, mapped.data);
+			//shmem_copy_data(next_tex, mapped.data);
 		}
 	}
 
@@ -966,14 +955,14 @@ static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api:
 	}
 	else
 	{
-		if (shmem_texture_data_lock(data.shmem.cur_tex))
+		/*if (shmem_texture_data_lock(data.shmem.cur_tex))
 		{
 			device->unmap_texture_region(data.shmem.copy_surfaces[data.shmem.cur_tex], 0);
 			data.shmem.texture_mapped[data.shmem.cur_tex] = false;
 			shmem_texture_data_unlock(data.shmem.cur_tex);
-		}
+		}*/
 
-		if (data.multisampled)
+		/*if (data.multisampled)
 		{
 			cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::resolve_source);
 			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::cpu_access, reshade::api::resource_usage::resolve_dest);
@@ -992,12 +981,58 @@ static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api:
 
 			cmd_list->barrier(data.shmem.copy_surfaces[data.shmem.cur_tex], reshade::api::resource_usage::copy_dest, reshade::api::resource_usage::cpu_access);
 			cmd_list->barrier(back_buffer, reshade::api::resource_usage::copy_source, reshade::api::resource_usage::present);
-		}
+		}*/
 
 		data.shmem.texture_ready[data.shmem.cur_tex] = true;
 	}
 
 	data.shmem.cur_tex = next_tex;
+}
+
+// 
+static void on_present_swapchain(command_queue* queue, swapchain* swapchain)
+{
+	// via https://reshade.me/forum/general-discussion/7538-capture-final-frame-color-buffer-to-file
+	user_data& data = swapchain->get_private_data<user_data>();
+
+	device* const device = swapchain->get_device();
+
+	command_list* cmd_list = queue->get_immediate_command_list();
+	// TODO: Add barriers/state transitions for DX12/Vulkan support (using "cmd_list->barrier()")
+	// Copy current frame into the CPU-accessible texture
+	cmd_list->copy_resource(swapchain->get_current_back_buffer(), data.host_resource);
+	// Very slow ... but ensures the copy has completed before accessing the data next
+	queue->wait_idle();
+
+	// Map CPU-accessible texture to read the data
+	subresource_data host_data;
+	if (!device->map_texture_region(
+		data.host_resource, 0, nullptr, map_access::read_only, &host_data))
+		return;
+
+	const resource_desc desc = device->get_resource_desc(data.host_resource);
+
+	// TODO: This assumes that the format is RGBA8, need to handle differently for different formats
+	assert(desc.texture.format == format::r8g8b8a8_unorm);
+
+	
+
+	//for (int y = 0; y < desc.texture.height; ++y)
+	//{
+	//	for (int x = 0; x < desc.texture.width; ++x)
+	//	{
+	//		const size_t host_data_index = y * host_data.row_pitch + x * 4;
+
+	//		const uint8_t r = static_cast<const uint8_t*>(host_data.data)[host_data_index + 0];
+	//		const uint8_t g = static_cast<const uint8_t*>(host_data.data)[host_data_index + 1];
+	//		const uint8_t b = static_cast<const uint8_t*>(host_data.data)[host_data_index + 2];
+	//		const uint8_t a = static_cast<const uint8_t*>(host_data.data)[host_data_index + 3];
+
+	//		// TODO: Do something with the pixel, e.g. dump this whole image to an image file
+	//	}
+	//}
+
+	device->unmap_texture_region(data.host_resource, 0);
 }
 
 bool capture_started = false;
@@ -1007,7 +1042,7 @@ static void on_present(command_queue *queue, swapchain *swapchain, const rect *s
 	device *const device = swapchain->get_device();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
 	
-		
+	//on_present_swapchain(queue, swapchain);
 	
 	// Keep track of the total render pass count of this frame
 	device_data.last_render_pass_count = device_data.current_render_pass_count > 0 ? device_data.current_render_pass_count : 1;
@@ -1105,11 +1140,7 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 	if (capture_started)
 	{
 		reshade::api::resource back_buffer = runtime->get_current_back_buffer();
-
-		if (data.using_shtex)
-			capture_impl_shtex(runtime->get_command_queue(), back_buffer);
-		else
-			capture_impl_shmem(runtime->get_command_queue(), back_buffer);
+		capture_impl_shmem(runtime->get_command_queue(), back_buffer);
 	}
 
 	uint32_t frame_width, frame_height;
@@ -1397,13 +1428,13 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 	bool force_reset = false;
 
-	if (bool do_break_on_clear = s_do_break_on_clear != 0;
+	/*if (bool do_break_on_clear = s_do_break_on_clear != 0;
 		ImGui::Checkbox("Do Break On Clear", &do_break_on_clear)
 		)
 	{
 		s_do_break_on_clear = do_break_on_clear ? 1 : 0;
 		reshade::config_set_value(nullptr, "DEPTH", "DoBreakOnClear", s_do_break_on_clear);
-	}
+	}*/
 
 	/*if (bool use_aspect_ratio_heuristics = s_use_aspect_ratio_heuristics != 0;
 		ImGui::Checkbox("Use aspect ratio heuristics", &use_aspect_ratio_heuristics))
@@ -1660,18 +1691,52 @@ static void on_end_render_pass(command_list* cmd_list)
 	}
 }
 
-static void on_destroy_swapchain(reshade::api::swapchain* swapchain)
+static void on_init_swapchain(swapchain* swapchain)
 {
-	/*if (global_hook_info == nullptr)
-		return;*/
+	user_data& data = swapchain->create_private_data<user_data>();
 
-	capture_impl_free(swapchain);
+	device* const device = swapchain->get_device();
+
+	// Get description of the back buffer resources
+	const resource_desc desc = device->get_resource_desc(swapchain->get_current_back_buffer());
+
+	// Create a CPU-accessible texture with matching dimensions
+	if (!device->create_resource(
+		resource_desc(
+			desc.texture.width,
+			desc.texture.height,
+			1,
+			1,
+			desc.texture.format,
+			1,
+			memory_heap::gpu_to_cpu,
+			resource_usage::copy_dest),
+		nullptr,
+		resource_usage::cpu_access,
+		&data.host_resource))
+	{
+		reshade::log_message(1, "Failed to create host resource");
+		return;
+	}
+}
+
+static void on_destroy_swapchain(swapchain* swapchain)
+{
+	user_data& data = swapchain->get_private_data<user_data>();
+
+	if (data.host_resource != 0)
+		swapchain->get_device()->destroy_resource(data.host_resource);
+
+	swapchain->destroy_private_data<user_data>();
+
+	//capture_impl_free(swapchain);
 }
 
 void register_addon_depth()
 {
 	reshade::register_overlay(nullptr, draw_settings_overlay);
 
+	reshade::register_event<reshade::addon_event::init_swapchain>(on_init_swapchain);
 	reshade::register_event<reshade::addon_event::init_device>(on_init_device);
 	reshade::register_event<reshade::addon_event::init_command_list>(on_init_command_list);
 	reshade::register_event<reshade::addon_event::init_command_queue>(on_init_command_queue);
