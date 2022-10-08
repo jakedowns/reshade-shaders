@@ -24,7 +24,7 @@ static std::shared_mutex s_mutex;
 
 static bool s_disable_intz = false;
 // Enable or disable the creation of backup copies at clear operations on the selected depth-stencil
-static unsigned int s_preserve_depth_buffers = 0;
+static unsigned int s_preserve_depth_buffers = 1;
 // Enable or disable the aspect ratio check from 'check_aspect_ratio' in the detection heuristic
 static unsigned int s_use_aspect_ratio_heuristics = 0;
 
