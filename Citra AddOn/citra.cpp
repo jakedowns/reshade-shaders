@@ -402,18 +402,24 @@ void copy_rgb_buffer(command_list* cmd_list, my_ops op)
 		test = true;
 	}
 	device* const device = cmd_list->get_device();
-	//generic_depth_device_data *const depth_dev = device->get_private_data<generic_depth_device_data>();
-	generic_backbuffer_backup my_backup = device->get_private_data<generic_depth_device_data>().my_backbuffer_backup;
+	generic_depth_device_data depth_dev = device->get_private_data<generic_depth_device_data>();
+	generic_backbuffer_backup my_backup = depth_dev.my_backbuffer_backup;
 	resource_view_desc srv_desc = my_backup.left_rsvd;
 	//const resource_desc rd = device->get_resource_desc(swapchain->get_current_back_buffer());
 	//resource_view_desc rvd = device->get_resource_view_desc();
 	// TODO: determine if we need to save backbuffer to LEFT eye backup or RIGHT eye backup
+	if (my_backup.swapchain_pointer == 0 || my_backup.swapchain_pointer == nullptr) {
+		return;
+	}
 	reshade::api::resource back_buffer = my_backup.swapchain_pointer->get_current_back_buffer();
 	cmd_list->barrier(back_buffer, resource_usage::present, resource_usage::copy_source);
 	if (op == my_ops::clear || op == my_ops::draw) {
 		// left eye
 		left_eye_copies_this_frame++;
 		// CMD LIST COPY HERE
+		if (depth_dev.main_runtime) {
+			depth_dev.main_runtime->get_command_queue()->wait_idle();
+		}
 		cmd_list->copy_resource(back_buffer, my_backup.left_pass_texture_resource);
 	}
 	else {
@@ -1259,8 +1265,8 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 			depth_data.selected_shader_resource_right = { 0 };
 
 			// Create two-dimensional resource view to the first level and layer of the depth-stencil resource
-			//resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(best_match_desc.texture.format) : best_match_desc.texture.format);
-			resource_view_desc srv_desc(best_match_desc.texture.format);
+			resource_view_desc srv_desc(api != device_api::opengl && api != device_api::vulkan ? format_to_default_typed(best_match_desc.texture.format) : best_match_desc.texture.format);
+			//resource_view_desc srv_desc(best_match_desc.texture.format);
 
 			// Need to create backup texture only if doing backup copies or original resource does not support shader access (which is necessary for binding it to effects)
 			// Also always create a backup texture in D3D12 or Vulkan to circument problems in case application makes use of resource aliasing
@@ -1731,8 +1737,14 @@ static void draw_settings_overlay(effect_runtime *runtime)
 //	}
 //}
 
+UINT32 num_swapchains_init = 0;
+
 static void on_init_swapchain(swapchain* swapchain)
 {
+	num_swapchains_init++;
+	if (num_swapchains_init < 3) {
+		return;
+	}
 	user_data& data = swapchain->create_private_data<user_data>();
 
 	device *const my_device = swapchain->get_device();
@@ -1748,47 +1760,84 @@ static void on_init_swapchain(swapchain* swapchain)
 		desc.texture.height,
 		1,
 		1,
+		//format::b8g8r8a8_unorm,
+		desc.texture.format,
+		//format::r8g8b8a8_typeless,
+		1,
+		memory_heap::gpu_only, //memory_heap::gpu_to_cpu,
+		resource_usage::shader_resource | resource_usage::copy_dest);
+
+	const resource_desc my_desc_2 = resource_desc(
+		desc.texture.width,
+		desc.texture.height,
+		1,
+		1,
+		//format::r8g8b8a8_typeless,
 		desc.texture.format,
 		1,
 		memory_heap::gpu_only, //memory_heap::gpu_to_cpu,
-		resource_usage::copy_dest);
+		resource_usage::shader_resource | resource_usage::copy_dest);
 
-	// i don't think i can i assign like this
-	// i think i need to copy it with create_resource
-	//my_backup->left_resource_desc = my_desc;
-	// Create a texture with matching dimensions
-	// TODO: create this in our backup singleton
-	
+	// LEFT EYE
 	if (!my_device->create_resource(
 		my_desc,
 		nullptr,
-		resource_usage::shader_resource, //resource_usage::cpu_access,
+		resource_usage::shader_resource | resource_usage::copy_dest, //resource_usage::cpu_access,
 		&my_backup.left_pass_texture_resource))
 	{
 		reshade::log_message(1, "Failed to create host resource");
 		return;
 	}
 
+	// RIGHT EYE
+	if (!my_device->create_resource(
+		my_desc_2,
+		nullptr,
+		resource_usage::shader_resource | resource_usage::copy_dest, //resource_usage::cpu_access,
+		&my_backup.right_pass_texture_resource))
+	{
+		reshade::log_message(1, "Failed to create host resource");
+		return;
+	}
+
+
 	resource_view_desc srv_desc(my_desc.texture.format);
+	resource_view_desc srv_desc2(my_desc_2.texture.format);
+
 	if (!my_device->create_resource_view(my_backup.left_pass_texture_resource, resource_usage::shader_resource, srv_desc, &my_backup.left_pass_resource_view)) {
 		return;
 	}
 		
-	if (!my_device->create_resource_view(my_backup.right_pass_texture_resource, resource_usage::shader_resource, srv_desc, &my_backup.right_pass_resource_view)) {
+	if (!my_device->create_resource_view(my_backup.right_pass_texture_resource, resource_usage::shader_resource, srv_desc2, &my_backup.right_pass_resource_view)) {
 		return;
 	}
+
+	/*if (depth_dev.main_runtime) {
+		update_effect_runtime(depth_dev.main_runtime);
+	}*/
+	
+
+	bool complete = true;
 }
 
 static void on_destroy_swapchain(swapchain* swapchain)
 {
-	user_data& data = swapchain->get_private_data<user_data>();
+	// destroy swapchain referencing resources
+	/*device* const my_device = swapchain->get_device();
+	generic_depth_device_data& depth_dev = my_device->get_private_data<generic_depth_device_data>();
+	generic_backbuffer_backup& my_backup = depth_dev.my_backbuffer_backup;
 
-	if (data.host_resource != 0)
-		swapchain->get_device()->destroy_resource(data.host_resource);
+	my_device->destroy_resource_view(my_backup.left_pass_resource_view);
+	my_device->destroy_resource_view(my_backup.right_pass_resource_view);
 
-	swapchain->destroy_private_data<user_data>();
+	my_device->destroy_resource(my_backup.left_pass_texture_resource);
+	my_device->destroy_resource(my_backup.right_pass_texture_resource);
 
-	//capture_impl_free(swapchain);
+	my_backup.left_pass_resource_view = { 0 };
+	my_backup.right_pass_resource_view = { 0 };
+	my_backup.left_pass_texture_resource = { 0 };
+	my_backup.right_pass_texture_resource = { 0 };
+	my_backup.swapchain_pointer = { 0 };*/
 }
 
 void register_addon_depth()
