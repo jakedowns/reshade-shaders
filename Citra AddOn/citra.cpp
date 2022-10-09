@@ -396,6 +396,7 @@ enum class my_ops
 };
 void copy_rgb_buffer(command_list* cmd_list, my_ops op, uint32_t vertices, uint32_t draw_calls)
 {
+	return; // not using for now...
 	bool test = false;
 
 	if (s_do_break_on_clear) {

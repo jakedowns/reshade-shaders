@@ -84,7 +84,7 @@ uniform int iUIPreviewDepth <
 ui_category = "Preview Depth Buffer";
 ui_label = "Preview Depth Buffer";
 ui_min = 0;
-ui_max = 3;
+ui_max = 4;
 ui_step = 1;
 > = 0;
 
@@ -522,11 +522,53 @@ float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
     return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha)
     : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth2.xxx,1.0), bUIPreviewAlpha); // tex2D(RGBRight, second)
   }
-  if (iUIPreviewDepth > 0) {
-    float depth = GetModDepth(tex,iUIPreviewDepth);
-    return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha);
-  }
-  return tex2D(ReShade::BackBuffer, tex);
+  if (iUIPreviewDepth == 4) {
+    float2 texHalfWidth = float2(tex.xy);
+    texHalfWidth.x *= 2.0;
+    texHalfWidth.y *= 2.0;
+    texHalfWidth.y -= 1.0;
+    float2 quadTex = float2(tex.xy);
+    quadTex *= 2;
+    float2 flippable = float2(tex.xy);
+    float2 flippable2 = float2(tex.xy);
+
+    float2 second = float2(texHalfWidth.xy);
+    second.x -= 1.0;
+
+    float depth = GetModDepth(texHalfWidth,bSwapLR ? 2 : 1);
+    float depth2 = GetModDepth(second,bSwapLR ? 1 : 2);
+
+    if (bSwapLR) {
+      flippable.x += 0.5;
+      flippable.y *= 2.0;
+      flippable2.x -= 0.5;
+      flippable2.y *= 2.0;
+    }
+    if (tex.x < 0.5) {
+      if (tex.y < 0.5) {
+          // rgb L
+
+          return tex2D(ReShade::BackBuffer,flippable);
+        }
+  else {
+          // depth L
+          return float4(depth.xxx,1.0);
+        }
+      }
+  else {
+   if (tex.y < 0.5) {
+     return tex2D(ReShade::BackBuffer,flippable2);
+   }
+else {
+ return float4(depth2.xxx,1.0);
+}
+}
+}
+if (iUIPreviewDepth > 0) {
+  float depth = GetModDepth(tex,iUIPreviewDepth);
+  return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha);
+}
+return tex2D(ReShade::BackBuffer, tex);
 }
 
 
