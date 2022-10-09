@@ -394,7 +394,7 @@ enum class my_ops
 	present,
 	render_fx_start
 };
-void copy_rgb_buffer(command_list* cmd_list, my_ops op)
+void copy_rgb_buffer(command_list* cmd_list, my_ops op, uint32_t vertices, uint32_t draw_calls)
 {
 	bool test = false;
 
@@ -412,32 +412,28 @@ void copy_rgb_buffer(command_list* cmd_list, my_ops op)
 		return;
 	}
 	reshade::api::resource back_buffer = my_backup.swapchain_pointer->get_current_back_buffer();
-	cmd_list->barrier(back_buffer, resource_usage::present, resource_usage::copy_source);
+	//cmd_list->barrier(back_buffer, resource_usage::shader_resource | resource_usage::present, resource_usage::copy_source);
 	if (op == my_ops::clear || op == my_ops::draw) {
 		// left eye
 		left_eye_copies_this_frame++;
-		// CMD LIST COPY HERE
-		if (depth_dev.main_runtime) {
-			depth_dev.main_runtime->get_command_queue()->wait_idle();
-		}
+
 		cmd_list->copy_resource(back_buffer, my_backup.left_pass_texture_resource);
 	}
 	else {
 		// right eye
 		right_eye_copies_this_frame++;
-		// CMD LIST COPY HERE
 		
 		cmd_list->copy_resource(back_buffer, my_backup.right_pass_texture_resource);
 		
 	}
-	cmd_list->barrier(back_buffer, resource_usage::copy_source, resource_usage::present);
+	//cmd_list->barrier(back_buffer, resource_usage::copy_dest, resource_usage::shader_resource);// , resource_usage::present);
 }
 
 static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, resource depth_stencil, clear_op op)
 {
 	if (depth_stencil == 0) {
 		clears_this_frame++;
-		copy_rgb_buffer(cmd_list, my_ops::clear);
+		copy_rgb_buffer(cmd_list, my_ops::clear, 0, 0);
 		return;
 	}
 
@@ -598,6 +594,8 @@ static void on_init_command_queue(command_queue *cmd_queue)
 static void on_init_effect_runtime(effect_runtime *runtime)
 {
 	runtime->create_private_data<generic_depth_data>();
+	auto& device_data = runtime->get_private_data<generic_depth_device_data>();
+	device_data.main_runtime = runtime;
 }
 static void on_destroy_device(device *device)
 {
@@ -763,7 +761,7 @@ static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instance
 	if (state.current_depth_stencil == 0) {
 		draws_without_depth++;
 		fullscreen_draws_this_frame += fullscreen_draw ? 1 : 0;
-		copy_rgb_buffer(cmd_list, my_ops::draw);
+		copy_rgb_buffer(cmd_list, my_ops::draw, vertices, 0);
 		return false; // This is a draw call with no depth-stencil bound
 	}
 		
@@ -810,7 +808,7 @@ static bool on_draw_indirect(command_list *cmd_list, indirect_command type, reso
 
 	auto &state = cmd_list->get_private_data<state_tracking>();
 	if (state.current_depth_stencil == 0) {
-		copy_rgb_buffer(cmd_list,my_ops::draw);
+		copy_rgb_buffer(cmd_list,my_ops::draw,0,draw_count);
 		return false; // This is a draw call with no depth-stencil bound
 	}
 
@@ -1158,7 +1156,7 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 		max_draws_without_depth = draws_without_depth;
 	}
 	// TODO: do one last right eye backbuffer copy here?
-	copy_rgb_buffer(cmd_list, my_ops::render_fx_start);
+	copy_rgb_buffer(cmd_list, my_ops::render_fx_start,0,0);
 	draws_this_frame = 0;
 	fullscreen_draws_this_frame = 0;
 	clears_this_frame = 0;
@@ -1454,6 +1452,20 @@ static void draw_settings_overlay(effect_runtime *runtime)
 	device *const device = runtime->get_device();
 	generic_depth_data &data = runtime->get_private_data<generic_depth_data>();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
+
+	ImGui::Text("draws_without_depth %u", draws_without_depth);
+	ImGui::Text("max_draws_without_depth %u", max_draws_without_depth);
+	ImGui::Text("max_draws_per_frame %u", max_draws_per_frame);
+	ImGui::Text("frames %u", frames);
+	ImGui::Text("draws_this_frame %u", draws_this_frame);
+	ImGui::Text("left_eye_copies_this_frame %u", left_eye_copies_this_frame);
+	ImGui::Text("right_eye_copies_this_frame %u", right_eye_copies_this_frame);
+	ImGui::Text("clears_this_frame %u", clears_this_frame);
+	ImGui::Text("fullscreen_draws_this_frame %u", fullscreen_draws_this_frame);
+
+	ImGui::Spacing();
+	ImGui::Separator();
+	ImGui::Spacing();
 
 	ImGui::Text("Current render pass count: %u", device_data.last_render_pass_count);
 	ImGui::Text("Offset from end of frame to render effects at: %u", device_data.offset_from_last_pass);

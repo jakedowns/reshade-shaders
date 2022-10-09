@@ -28,8 +28,8 @@ sampler RGBRight{ Texture = TexRGBRight; };
 texture ModifiedDepthTex{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
 texture UntouchedDepthTex{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
 texture UntouchedDepthTex_2{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
-texture RGB_L{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
-texture RGB_R{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
+texture RGB_L{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
+texture RGB_R{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
 
 
 // -- Options --
@@ -503,12 +503,24 @@ float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET
   if (iUIPreviewDepth == 3) {
     float2 texHalfWidth = float2(tex.xy);
     texHalfWidth.x *= 2.0;
+
+    float2 bbHalfWidth = float2(tex.xy);
+    bbHalfWidth.x += 0.5;
+
     float2 second = float2(texHalfWidth.xy);
     second.x -= 1.0;
+
+    float2 secondTwo = float2(tex.xy);
+    secondTwo.x -= 0.5;
+
     float depth = GetModDepth(texHalfWidth,bSwapLR ? 2 : 1);
     float depth2 = GetModDepth(second,bSwapLR ? 1 : 2);
-    return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, texHalfWidth), float4(depth.xxx,1.0), bUIPreviewAlpha)
-    : lerp(tex2D(ReShade::BackBuffer, second), float4(depth2.xxx,1.0), bUIPreviewAlpha);
+    if (bSwapLR) {
+      return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, bbHalfWidth), float4(depth.xxx,1.0), bUIPreviewAlpha)
+      : lerp(tex2D(ReShade::BackBuffer, secondTwo), float4(depth2.xxx,1.0), bUIPreviewAlpha); // tex2D(ReShade::BackBuffer, second)  
+    }
+    return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha)
+    : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth2.xxx,1.0), bUIPreviewAlpha); // tex2D(RGBRight, second)
   }
   if (iUIPreviewDepth > 0) {
     float depth = GetModDepth(tex,iUIPreviewDepth);
