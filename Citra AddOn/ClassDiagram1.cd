@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Struct Name="user_data" Collapsed="true">
+    <Position X="4.75" Y="3.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="draw_stats" Collapsed="true">
+    <Position X="0.5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAIAAAAAAQAAAAAAAAAAAAQAAAAAAAACAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="clear_stats" Collapsed="true">
+    <Position X="0.5" Y="1.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_info" Collapsed="true">
+    <Position X="3" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>BEAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAABA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_hash" Collapsed="true">
+    <Position X="8.25" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="state_tracking" Collapsed="true">
+    <Position X="8.25" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAIAAAEAACBIAABAAAAAAAEAAAAAAAAAAEAAAAIAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="generic_depth_data" Collapsed="true">
+    <Position X="6.5" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAgAAAAIAAABAAAIAAABBAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="generic_backbuffer_backup" Collapsed="true">
+    <Position X="4.75" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>CIAAACAAgAIAEAAAAAAAAAABAAAAAAAAEAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="depth_stencil_backup" Collapsed="true">
+    <Position X="6.5" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAMAAAAgAAAAAAAAAAAAAQAAAABAAAEAABAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="command_list_data" Collapsed="true">
+    <Position X="4.75" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>CAAAAAAAAAAAAIIAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="generic_depth_device_data" Collapsed="true">
+    <Position X="8.25" Y="1.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AgABAAAAAgAAAAQAAABAAABAIAACAAAAAACAAABAQQA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="capture_data" Collapsed="true">
+    <Position X="3" Y="0.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAEAICEAAAAAAAAAAAAAAAAAAgAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="hook_info" Collapsed="true">
+    <Position X="3" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAABAAAQCIAUAACAAACAABAUAIAAEAgIAAgAI=</HashCode>
+      <FileName>hook_info.hpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="shmem_data" Collapsed="true">
+    <Position X="4.75" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAEAAAAgAAAAAAAAAAAAAAAAIAAAA=</HashCode>
+      <FileName>hook_info.hpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="shtex_data" Collapsed="true">
+    <Position X="6.5" Y="2.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAA=</HashCode>
+      <FileName>hook_info.hpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Struct Name="`anonymous-namespace'::thread_data" Collapsed="true">
+    <Position X="3" Y="3.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AABACCABAAAAAIAAAEAIAEAAAAAAAEAAAAgAAAAAAAg=</HashCode>
+      <FileName>hook_info.cpp</FileName>
+    </TypeIdentifier>
+  </Struct>
+  <Enum Name="clear_op" Collapsed="true">
+    <Position X="4.75" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAACAAQAAAAAAAAAAAAIAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Enum Name="my_ops" Collapsed="true">
+    <Position X="6.5" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AEAAAAAAAAAAAAAAAAIQAAAAAAAAAAAQAAAAAAAAAAA=</HashCode>
+      <FileName>citra.cpp</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Enum Name="capture_type" Collapsed="true">
+    <Position X="3" Y="4.75" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAACAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>hook_info.hpp</FileName>
+    </TypeIdentifier>
+  </Enum>
+  <Font Name="Segoe UI" Size="9" />
+</ClassDiagram>

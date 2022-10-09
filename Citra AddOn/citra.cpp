@@ -150,12 +150,14 @@ struct __declspec(uuid("7c6363c7-f94e-437a-9160-141782c44a98")) generic_depth_da
 	std::unordered_map<resource, unsigned int, depth_stencil_hash> display_count_per_depth_stencil;
 };
 
-struct generic_backbuffer_backup
+struct __declspec(uuid("3af1cea5-87bd-47c3-9aea-caf10f159c1b")) generic_backbuffer_backup
 {
 	// The number of effect runtimes referencing this backup
 	size_t references = 1;
 
 	resource_desc left_resource_desc;
+
+	resource_view_desc left_rsvd;
 
 	resource left_pass_texture_resource = { 0 };
 
@@ -164,6 +166,8 @@ struct generic_backbuffer_backup
 	resource right_pass_texture_resource = { 0 };
 
 	resource_view right_pass_resource_view = { 0 };
+
+	swapchain* swapchain_pointer;
 
 };
 
@@ -331,12 +335,12 @@ struct capture_data
 	union
 	{
 		/* shared texture */
-		struct
+		/*struct
 		{
 			shtex_data* shtex_info;
 			reshade::api::resource texture;
 			HANDLE handle;
-		} shtex;
+		} shtex;*/
 		/* shared memory */
 		struct
 		{
@@ -374,19 +378,68 @@ static bool check_aspect_ratio(float width_to_check, float height_to_check, uint
 	return std::fabs(aspect_ratio) <= 0.1f && ((w_ratio <= 1.85f && w_ratio >= 0.5f && h_ratio <= 1.85f && h_ratio >= 0.5f) || (s_use_aspect_ratio_heuristics == 2 && std::modf(w_ratio, &w_ratio) <= 0.02f && std::modf(h_ratio, &h_ratio) <= 0.02f));
 }
 
+unsigned int draws_without_depth = 0;
+unsigned int max_draws_without_depth = 0;
+unsigned int max_draws_per_frame = 0;
+unsigned int frames = 0;
+unsigned int draws_this_frame = 0;
+unsigned int left_eye_copies_this_frame = 0;
+unsigned int right_eye_copies_this_frame = 0;
+unsigned int clears_this_frame = 0;
+unsigned int fullscreen_draws_this_frame = 0;
+enum class my_ops
+{
+	clear,
+	draw,
+	present,
+	render_fx_start
+};
+void copy_rgb_buffer(command_list* cmd_list, my_ops op)
+{
+	bool test = false;
+
+	if (s_do_break_on_clear) {
+		test = true;
+	}
+	device* const device = cmd_list->get_device();
+	//generic_depth_device_data *const depth_dev = device->get_private_data<generic_depth_device_data>();
+	generic_backbuffer_backup my_backup = device->get_private_data<generic_depth_device_data>().my_backbuffer_backup;
+	resource_view_desc srv_desc = my_backup.left_rsvd;
+	//const resource_desc rd = device->get_resource_desc(swapchain->get_current_back_buffer());
+	//resource_view_desc rvd = device->get_resource_view_desc();
+	// TODO: determine if we need to save backbuffer to LEFT eye backup or RIGHT eye backup
+	reshade::api::resource back_buffer = my_backup.swapchain_pointer->get_current_back_buffer();
+	cmd_list->barrier(back_buffer, resource_usage::present, resource_usage::copy_source);
+	if (op == my_ops::clear || op == my_ops::draw) {
+		// left eye
+		left_eye_copies_this_frame++;
+		// CMD LIST COPY HERE
+		cmd_list->copy_resource(back_buffer, my_backup.left_pass_texture_resource);
+	}
+	else {
+		// right eye
+		right_eye_copies_this_frame++;
+		// CMD LIST COPY HERE
+		
+		cmd_list->copy_resource(back_buffer, my_backup.right_pass_texture_resource);
+		
+	}
+	cmd_list->barrier(back_buffer, resource_usage::copy_source, resource_usage::present);
+}
+
 static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, resource depth_stencil, clear_op op)
 {
-	if (depth_stencil == 0)
+	if (depth_stencil == 0) {
+		clears_this_frame++;
+		copy_rgb_buffer(cmd_list, my_ops::clear);
 		return;
+	}
 
 	device *const device = cmd_list->get_device();
 
 	depth_stencil_backup *const depth_stencil_backup = device->get_private_data<generic_depth_device_data>().find_depth_stencil_backup(depth_stencil);
 
-	bool test = false;
-	if (s_do_break_on_clear) {
-		test = true;
-	}
+	
 
 	if (depth_stencil_backup == nullptr || depth_stencil_backup->backup_texture == 0 || depth_stencil_backup->backup_texture_right == 0)
 		return;
@@ -488,13 +541,16 @@ static void on_clear_depth_impl(command_list *cmd_list, state_tracking &state, r
 static void update_effect_runtime(effect_runtime *runtime)
 {
 	const generic_depth_data &instance = runtime->get_private_data<generic_depth_data>();
+	const generic_depth_device_data& dev_data = runtime->get_private_data<generic_depth_device_data>();
+	const generic_backbuffer_backup& bbb = dev_data.my_backbuffer_backup; //runtime->get_private_data<generic_backbuffer_backup>();
 
 	runtime->update_texture_bindings("ORIG_DEPTH", instance.selected_shader_resource);
 	// ORIG_DEPTH_RIGHT
 	runtime->update_texture_bindings("ORIG_DEPTH_2", instance.selected_shader_resource_right);
 
-	/*runtime->update_texture_bindings("RGB_LEFT", instance.selected_shader_resource);
-	runtime->update_texture_bindings("RGB_RIGHT", instance.selected_shader_resource_right);*/
+	runtime->update_texture_bindings("RGB_LEFT", bbb.left_pass_resource_view);
+
+	runtime->update_texture_bindings("RGB_RIGHT", bbb.right_pass_resource_view);
 
 	runtime->enumerate_uniform_variables(nullptr, [&instance](effect_runtime *runtime, auto variable) {
 		char source[32] = "";
@@ -689,17 +745,24 @@ static void on_destroy_resource(device *device, resource resource)
 	}
 }
 
+
+
 static bool on_draw(command_list *cmd_list, uint32_t vertices, uint32_t instances, uint32_t, uint32_t)
 {
 	auto &state = cmd_list->get_private_data<state_tracking>();
+	// Check if this draw call likely represets a fullscreen rectangle (two triangles), which would clear the depth-stencil
+	const bool fullscreen_draw = vertices == 6 && instances == 1;
+
+	draws_this_frame++;
 	if (state.current_depth_stencil == 0) {
-		// TODO: look into tracking RGB here!
+		draws_without_depth++;
+		fullscreen_draws_this_frame += fullscreen_draw ? 1 : 0;
+		copy_rgb_buffer(cmd_list, my_ops::draw);
 		return false; // This is a draw call with no depth-stencil bound
 	}
 		
 
-	// Check if this draw call likely represets a fullscreen rectangle (two triangles), which would clear the depth-stencil
-	const bool fullscreen_draw = vertices == 6 && instances == 1;
+	
 	if (fullscreen_draw
 		//&& s_preserve_depth_buffers == 2
 		&& state.first_draw_since_bind
@@ -733,6 +796,7 @@ static bool on_draw_indexed(command_list *cmd_list, uint32_t indices, uint32_t i
 
 	return false;
 }
+
 static bool on_draw_indirect(command_list *cmd_list, indirect_command type, resource, uint64_t, uint32_t draw_count, uint32_t)
 {
 	if (type == indirect_command::dispatch)
@@ -740,7 +804,7 @@ static bool on_draw_indirect(command_list *cmd_list, indirect_command type, reso
 
 	auto &state = cmd_list->get_private_data<state_tracking>();
 	if (state.current_depth_stencil == 0) {
-		// TODO: look into tracking RGB here!
+		copy_rgb_buffer(cmd_list,my_ops::draw);
 		return false; // This is a draw call with no depth-stencil bound
 	}
 
@@ -862,9 +926,9 @@ static bool capture_impl_init(reshade::api::swapchain* swapchain)
 	for (int i = 0; i < NUM_BUFFERS; i++)
 	{
 		if (!device->create_resource(
-			reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_to_cpu, reshade::api::resource_usage::copy_dest),
+			reshade::api::resource_desc(data.cx, data.cy, 1, 1, data.format, 1, reshade::api::memory_heap::gpu_only, reshade::api::resource_usage::copy_dest),
 			nullptr,
-			reshade::api::resource_usage::cpu_access,
+			reshade::api::resource_usage::shader_resource,
 			&data.shmem.copy_surfaces[i]))
 			return false;
 	}
@@ -888,12 +952,7 @@ static void capture_impl_free(reshade::api::swapchain* swapchain)
 
 	capture_free();
 
-	if (data.using_shtex)
-	{
-		device->destroy_resource(data.shtex.texture);
-	}
-	else
-	{
+	
 		for (int i = 0; i < NUM_BUFFERS; i++)
 		{
 			if (data.shmem.copy_surfaces[i] == 0)
@@ -904,32 +963,10 @@ static void capture_impl_free(reshade::api::swapchain* swapchain)
 
 			device->destroy_resource(data.shmem.copy_surfaces[i]);
 		}
-	}
 
 	memset(&data, 0, sizeof(data));
 }
 
-static void capture_impl_shtex(reshade::api::command_queue* queue, reshade::api::resource back_buffer)
-{
-	reshade::api::command_list* cmd_list = queue->get_immediate_command_list();
-
-	if (data.multisampled)
-	{
-		cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::resolve_source);
-
-		cmd_list->resolve_texture_region(back_buffer, 0, nullptr, data.shtex.texture, 0, 0, 0, 0, data.format);
-
-		cmd_list->barrier(back_buffer, reshade::api::resource_usage::resolve_source, reshade::api::resource_usage::present);
-	}
-	else
-	{
-		cmd_list->barrier(back_buffer, reshade::api::resource_usage::present, reshade::api::resource_usage::copy_source);
-
-		cmd_list->copy_resource(back_buffer, data.shtex.texture);
-
-		cmd_list->barrier(back_buffer, reshade::api::resource_usage::copy_source, reshade::api::resource_usage::present);
-	}
-}
 static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api::resource back_buffer)
 {
 	reshade::api::device* device = queue->get_device();
@@ -990,50 +1027,50 @@ static void capture_impl_shmem(reshade::api::command_queue* queue, reshade::api:
 }
 
 // 
-static void on_present_swapchain(command_queue* queue, swapchain* swapchain)
-{
-	// via https://reshade.me/forum/general-discussion/7538-capture-final-frame-color-buffer-to-file
-	user_data& data = swapchain->get_private_data<user_data>();
-
-	device* const device = swapchain->get_device();
-
-	command_list* cmd_list = queue->get_immediate_command_list();
-	// TODO: Add barriers/state transitions for DX12/Vulkan support (using "cmd_list->barrier()")
-	// Copy current frame into the CPU-accessible texture
-	cmd_list->copy_resource(swapchain->get_current_back_buffer(), data.host_resource);
-	// Very slow ... but ensures the copy has completed before accessing the data next
-	queue->wait_idle();
-
-	// Map CPU-accessible texture to read the data
-	subresource_data host_data;
-	if (!device->map_texture_region(
-		data.host_resource, 0, nullptr, map_access::read_only, &host_data))
-		return;
-
-	const resource_desc desc = device->get_resource_desc(data.host_resource);
-
-	// TODO: This assumes that the format is RGBA8, need to handle differently for different formats
-	assert(desc.texture.format == format::r8g8b8a8_unorm);
-
-	
-
-	//for (int y = 0; y < desc.texture.height; ++y)
-	//{
-	//	for (int x = 0; x < desc.texture.width; ++x)
-	//	{
-	//		const size_t host_data_index = y * host_data.row_pitch + x * 4;
-
-	//		const uint8_t r = static_cast<const uint8_t*>(host_data.data)[host_data_index + 0];
-	//		const uint8_t g = static_cast<const uint8_t*>(host_data.data)[host_data_index + 1];
-	//		const uint8_t b = static_cast<const uint8_t*>(host_data.data)[host_data_index + 2];
-	//		const uint8_t a = static_cast<const uint8_t*>(host_data.data)[host_data_index + 3];
-
-	//		// TODO: Do something with the pixel, e.g. dump this whole image to an image file
-	//	}
-	//}
-
-	device->unmap_texture_region(data.host_resource, 0);
-}
+//static void on_present_swapchain(command_queue* queue, swapchain* swapchain)
+//{
+//	// via https://reshade.me/forum/general-discussion/7538-capture-final-frame-color-buffer-to-file
+//	user_data& data = swapchain->get_private_data<user_data>();
+//
+//	device* const device = swapchain->get_device();
+//
+//	command_list* cmd_list = queue->get_immediate_command_list();
+//	// TODO: Add barriers/state transitions for DX12/Vulkan support (using "cmd_list->barrier()")
+//	// Copy current frame into the CPU-accessible texture
+//	cmd_list->copy_resource(swapchain->get_current_back_buffer(), data.host_resource);
+//	// Very slow ... but ensures the copy has completed before accessing the data next
+//	queue->wait_idle();
+//
+//	// Map CPU-accessible texture to read the data
+//	subresource_data host_data;
+//	if (!device->map_texture_region(
+//		data.host_resource, 0, nullptr, map_access::read_only, &host_data))
+//		return;
+//
+//	const resource_desc desc = device->get_resource_desc(data.host_resource);
+//
+//	// TODO: This assumes that the format is RGBA8, need to handle differently for different formats
+//	assert(desc.texture.format == format::r8g8b8a8_unorm);
+//
+//	
+//
+//	//for (int y = 0; y < desc.texture.height; ++y)
+//	//{
+//	//	for (int x = 0; x < desc.texture.width; ++x)
+//	//	{
+//	//		const size_t host_data_index = y * host_data.row_pitch + x * 4;
+//
+//	//		const uint8_t r = static_cast<const uint8_t*>(host_data.data)[host_data_index + 0];
+//	//		const uint8_t g = static_cast<const uint8_t*>(host_data.data)[host_data_index + 1];
+//	//		const uint8_t b = static_cast<const uint8_t*>(host_data.data)[host_data_index + 2];
+//	//		const uint8_t a = static_cast<const uint8_t*>(host_data.data)[host_data_index + 3];
+//
+//	//		// TODO: Do something with the pixel, e.g. dump this whole image to an image file
+//	//	}
+//	//}
+//
+//	device->unmap_texture_region(data.host_resource, 0);
+//}
 
 bool capture_started = false;
 
@@ -1107,6 +1144,21 @@ static void on_present(command_queue *queue, swapchain *swapchain, const rect *s
 
 static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_list, resource_view, resource_view)
 {
+	frames++;
+	if (draws_this_frame > max_draws_per_frame) {
+		max_draws_per_frame = draws_this_frame;
+	}
+	if (draws_without_depth > max_draws_without_depth) {
+		max_draws_without_depth = draws_without_depth;
+	}
+	// TODO: do one last right eye backbuffer copy here?
+	copy_rgb_buffer(cmd_list, my_ops::render_fx_start);
+	draws_this_frame = 0;
+	fullscreen_draws_this_frame = 0;
+	clears_this_frame = 0;
+	draws_without_depth = 0;
+	left_eye_copies_this_frame = 0;
+	right_eye_copies_this_frame = 0;
 	device *const device = runtime->get_device();
 	generic_depth_data &depth_data = runtime->get_private_data<generic_depth_data>();
 	generic_depth_device_data &device_data = device->get_private_data<generic_depth_device_data>();
@@ -1130,18 +1182,6 @@ static void on_begin_render_effects(effect_runtime *runtime, command_list *cmd_l
 
 	/*if (capture_should_stop())
 		capture_impl_free(swapchain);*/
-
-		//if (capture_should_init())
-	if (!capture_started) {
-		capture_impl_init(runtime);
-		capture_started = true;
-	}
-
-	if (capture_started)
-	{
-		reshade::api::resource back_buffer = runtime->get_current_back_buffer();
-		capture_impl_shmem(runtime->get_command_queue(), back_buffer);
-	}
 
 	uint32_t frame_width, frame_height;
 	runtime->get_screenshot_width_and_height(&frame_width, &frame_height);
@@ -1428,13 +1468,13 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 	bool force_reset = false;
 
-	/*if (bool do_break_on_clear = s_do_break_on_clear != 0;
+	if (bool do_break_on_clear = s_do_break_on_clear != 0;
 		ImGui::Checkbox("Do Break On Clear", &do_break_on_clear)
 		)
 	{
 		s_do_break_on_clear = do_break_on_clear ? 1 : 0;
 		reshade::config_set_value(nullptr, "DEPTH", "DoBreakOnClear", s_do_break_on_clear);
-	}*/
+	}
 
 	/*if (bool use_aspect_ratio_heuristics = s_use_aspect_ratio_heuristics != 0;
 		ImGui::Checkbox("Use aspect ratio heuristics", &use_aspect_ratio_heuristics))
@@ -1649,73 +1689,92 @@ static void draw_settings_overlay(effect_runtime *runtime)
 
 // d3d12 / vulkan, but not ogl :G
 // Called after game has rendered a render pass, so check if it makes sense to render effects then (e.g. after main scene rendering, before UI rendering)
-static void on_end_render_pass(command_list* cmd_list)
-{
-	auto& data = cmd_list->get_private_data<command_list_data>();
-
-	if (data.has_multiple_rtvs || data.current_main_rtv == 0)
-		return; // Ignore when game is rendering to multiple render targets simultaneously
-
-	device* const device = cmd_list->get_device();
-	const auto& dev_data = device->get_private_data<generic_depth_device_data>();
-
-	auto& state = cmd_list->get_private_data<state_tracking>();
-
-	uint32_t width, height;
-	dev_data.main_runtime->get_screenshot_width_and_height(&width, &height);
-
-	const resource_desc render_target_desc = device->get_resource_desc(device->get_resource_from_view(data.current_main_rtv));
-
-	if (render_target_desc.texture.width != width || render_target_desc.texture.height != height)
-		return; // Ignore render targets that do not match the effect runtime back buffer dimensions
-
-	//generic_backbuffer_backup *my_backup = dev_data->my_backbuffer_backup;
-	//resource destination = dev_data.my_backbuffer_backup->left_pass_texture_resource;
-
-	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
-	// This is not perfect, since there may be multiple command lists at this will try and render effects in every single one ...
-	if (data.current_render_pass_index++ == (dev_data.last_render_pass_count - dev_data.offset_from_last_pass)) {
-		//dev_data.main_runtime->render_effects(cmd_list, data.current_main_rtv);
-		//device->get_resource_desc(it->first)
-		// TODO: allow setting TWO offsets, one for left eye, one for right eye
-		// TODO: update
-		
-		//cmd_list->copy_resource(render_target_desc, dev_data.my_backbuffer_backup.left_resource_desc);
-		//cmd_list->copy_resource(depth_stencil, destination);
-
-		/*if (!device->create_resource_view(my_backup.left_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
-			return;
-
-		if (!device->create_resource_view(my_backup->right_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource_right))
-			return;*/
-	}
-}
+//static void on_end_render_pass(command_list* cmd_list)
+//{
+//	auto& data = cmd_list->get_private_data<command_list_data>();
+//
+//	if (data.has_multiple_rtvs || data.current_main_rtv == 0)
+//		return; // Ignore when game is rendering to multiple render targets simultaneously
+//
+//	device* const device = cmd_list->get_device();
+//	const auto& dev_data = device->get_private_data<generic_depth_device_data>();
+//
+//	auto& state = cmd_list->get_private_data<state_tracking>();
+//
+//	uint32_t width, height;
+//	dev_data.main_runtime->get_screenshot_width_and_height(&width, &height);
+//
+//	const resource_desc render_target_desc = device->get_resource_desc(device->get_resource_from_view(data.current_main_rtv));
+//
+//	if (render_target_desc.texture.width != width || render_target_desc.texture.height != height)
+//		return; // Ignore render targets that do not match the effect runtime back buffer dimensions
+//
+//	//generic_backbuffer_backup *my_backup = dev_data->my_backbuffer_backup;
+//	//resource destination = dev_data.my_backbuffer_backup->left_pass_texture_resource;
+//
+//	// Render post-processing effects when a specific render pass is found (instead of at the end of the frame)
+//	// This is not perfect, since there may be multiple command lists at this will try and render effects in every single one ...
+//	if (data.current_render_pass_index++ == (dev_data.last_render_pass_count - dev_data.offset_from_last_pass)) {
+//		//dev_data.main_runtime->render_effects(cmd_list, data.current_main_rtv);
+//		//device->get_resource_desc(it->first)
+//		// TODO: allow setting TWO offsets, one for left eye, one for right eye
+//		// TODO: update
+//		
+//		//cmd_list->copy_resource(render_target_desc, dev_data.my_backbuffer_backup.left_resource_desc);
+//		//cmd_list->copy_resource(depth_stencil, destination);
+//
+//		/*if (!device->create_resource_view(my_backup.left_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource))
+//			return;
+//
+//		if (!device->create_resource_view(my_backup->right_pass_resource_view, resource_usage::shader_resource, srv_desc, &data.selected_shader_resource_right))
+//			return;*/
+//	}
+//}
 
 static void on_init_swapchain(swapchain* swapchain)
 {
 	user_data& data = swapchain->create_private_data<user_data>();
 
-	device* const device = swapchain->get_device();
+	device *const my_device = swapchain->get_device();
+	generic_depth_device_data &depth_dev = my_device->get_private_data<generic_depth_device_data>();
+	generic_backbuffer_backup &my_backup = depth_dev.my_backbuffer_backup;
+
+	my_backup.swapchain_pointer = swapchain;
 
 	// Get description of the back buffer resources
-	const resource_desc desc = device->get_resource_desc(swapchain->get_current_back_buffer());
+	const resource_desc desc = my_device->get_resource_desc(swapchain->get_current_back_buffer());
+	const resource_desc my_desc = resource_desc(
+		desc.texture.width,
+		desc.texture.height,
+		1,
+		1,
+		desc.texture.format,
+		1,
+		memory_heap::gpu_only, //memory_heap::gpu_to_cpu,
+		resource_usage::copy_dest);
 
-	// Create a CPU-accessible texture with matching dimensions
-	if (!device->create_resource(
-		resource_desc(
-			desc.texture.width,
-			desc.texture.height,
-			1,
-			1,
-			desc.texture.format,
-			1,
-			memory_heap::gpu_to_cpu,
-			resource_usage::copy_dest),
+	// i don't think i can i assign like this
+	// i think i need to copy it with create_resource
+	//my_backup->left_resource_desc = my_desc;
+	// Create a texture with matching dimensions
+	// TODO: create this in our backup singleton
+	
+	if (!my_device->create_resource(
+		my_desc,
 		nullptr,
-		resource_usage::cpu_access,
-		&data.host_resource))
+		resource_usage::shader_resource, //resource_usage::cpu_access,
+		&my_backup.left_pass_texture_resource))
 	{
 		reshade::log_message(1, "Failed to create host resource");
+		return;
+	}
+
+	resource_view_desc srv_desc(my_desc.texture.format);
+	if (!my_device->create_resource_view(my_backup.left_pass_texture_resource, resource_usage::shader_resource, srv_desc, &my_backup.left_pass_resource_view)) {
+		return;
+	}
+		
+	if (!my_device->create_resource_view(my_backup.right_pass_texture_resource, resource_usage::shader_resource, srv_desc, &my_backup.right_pass_resource_view)) {
 		return;
 	}
 }
