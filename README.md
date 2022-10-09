@@ -1,5 +1,7 @@
 ## Citra Looking Glass Portrait Support / Citra ReShade Support
 
+![image](https://user-images.githubusercontent.com/1683122/194764424-8130ca34-6f4b-40c7-a415-024b94a9affc.png)
+
 ### Method 1. Citra Addon + Citra Effect for ReShade:
 https://github.com/jakedowns/reshade-shaders/tree/main/Citra%20AddOn
 
