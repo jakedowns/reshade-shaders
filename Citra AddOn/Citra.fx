@@ -18,146 +18,158 @@ sampler OrigDepth{ Texture = OrigDepthTex; };
 texture OrigDepthTex2 : ORIG_DEPTH_2;
 sampler OrigDepth2{ Texture = OrigDepthTex2; };
 
-texture TexRGBLeft : RGB_LEFT;
-sampler RGBLeft{ Texture = TexRGBLeft; };
+// texture TexRGBLeft : RGB_LEFT;
+// sampler RGBLeft{ Texture = TexRGBLeft; };
 
-texture TexRGBRight : RGB_RIGHT;
-sampler RGBRight{ Texture = TexRGBRight; };
+// texture TexRGBRight : RGB_RIGHT;
+// sampler RGBRight{ Texture = TexRGBRight; };
 
 // output
 texture ModifiedDepthTex{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
 texture UntouchedDepthTex{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
 texture UntouchedDepthTex_2{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R32F; };
-texture RGB_L{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
-texture RGB_R{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
+// texture RGB_L{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
+// texture RGB_R{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA32F; };
 
 
 // -- Options --
 
-uniform float BUFFER_AR = BUFFER_HEIGHT / BUFFER_WIDTH;
+//uniform float BUFFER_AR = BUFFER_HEIGHT / BUFFER_WIDTH;
+
+uniform int iUIPreviewDepth <
+  ui_type = "combo";
+  ui_category = "Preview Depth Buffer";
+  ui_label = "Preview Depth Buffer Mode";
+  ui_items = "Off\0"
+             "Left\0"
+             "Right\0"
+             "SBS\0"
+             "Quad\0";
+> = 0;
+
+uniform float fUIPreviewAlpha <
+  ui_type = "drag";
+  ui_category = "Preview Depth Buffer";
+  ui_label = "Preview Alpha";
+  ui_min = 0.0; ui_max = 1.0;
+> = 1.0;
+
+uniform int iUIUseDepthChannel <
+  ui_type = "combo";
+  ui_label = "Depth Buffer Output";
+  ui_category = "Preview Depth Buffer";
+  ui_items = "1: Left\0"
+             "2: Right\0"
+             "3: SBS\0";
+> = 0;
 
 // super mario 3d land uses a full-height buffer
 // zelda oot uses a 1/2 height buffer (lower half of buffer is top screen)
 // luigi's mansion does like... quarter height or something, i dunno but it's different, need to add a preset for these games maybe
+
 uniform bool bUIHalfDepthHeight <
-    ui_label = "Half Depth Height (Zelda)";
+  ui_label = "Half Depth Height (Zelda)";
 > = false;
 
 uniform bool bUIDepthIsLog <
-    ui_label = "Depth is Log scale";
+  ui_label = "Depth is Log scale";
 > = false;
 
 uniform bool bUIDepthIsUpsideDown <
-    ui_label = "Depth is Upside Down";
+  ui_label = "Depth is Upside Down";
 > = false;
 
 uniform bool bUIDepthIsReversed <
-    ui_label = "Depth is Inverse Scale";
+  ui_label = "Depth is Inverse Scale";
 > = true;
 
 uniform bool bSwapLR <
-    ui_label = "Swap L/R";
+  ui_label = "Swap L/R";
 > = false;
 
 uniform int iUIBottomScreenPosition <
-    ui_type = "combo";
-ui_label = "Bottom Screen Position";
-ui_category = "Bottom Screen";
-ui_items = "Bottom\0"
-"Top\0"
-"Left\0"
-"Right\0"
-"Disabled\0";
+  ui_type = "combo";
+  ui_label = "Bottom Screen Position";
+  ui_category = "Bottom Screen";
+  ui_items = "Bottom\0"
+             "Top\0"
+             "Left\0"
+             "Right\0"
+             "Disabled\0";
 > = 0;
 
 uniform float fUIBottomFocus <
-    ui_type = "drag";
-ui_label = "Bottom Screen Focus";
-ui_category = "Bottom Screen";
-ui_tooltip = "Adjust bottom screen near/far focus.\n";
-ui_min = 0.0; ui_max = 1.0;
-ui_step = 0.05;
+  ui_type = "drag";
+  ui_label = "Bottom Screen Focus";
+  ui_category = "Bottom Screen";
+  ui_tooltip = "Adjust bottom screen near/far focus.\n";
+  ui_min = 0.0; ui_max = 1.0;
+  ui_step = 0.05;
 > = 0.5;
 
-uniform int iUIPreviewDepth <
-    ui_type = "drag";
-ui_category = "Preview Depth Buffer";
-ui_label = "Preview Depth Buffer";
-ui_min = 0;
-ui_max = 4;
-ui_step = 1;
-> = 0;
-
-uniform float bUIPreviewAlpha <
-    ui_type = "drag";
-ui_category = "Preview Depth Buffer";
-ui_label = "Preview Alpha";
-ui_min = 0.0; ui_max = 1.0;
-> = 1.0;
-
 uniform float fUINearPlane <
-    ui_type = "drag";
-ui_label = "Near Plane";
-ui_category = "Depth";
-ui_tooltip = "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=<value>";
-ui_min = 0.0; ui_max = 1000.0;
-ui_step = 0.01;
+  ui_type = "drag";
+  ui_label = "Near Plane";
+  ui_category = "Depth";
+  ui_tooltip = "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=<value>";
+  ui_min = 0.0; ui_max = 1000.0;
+  ui_step = 0.01;
 > = 0.0;
 
 uniform float fUIFarPlane <
-    ui_type = "drag";
-ui_label = "Far Plane";
-ui_category = "Depth";
-ui_tooltip = "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=<value>";
-ui_min = 0.0; ui_max = 1000.0;
-ui_step = 0.001;
+  ui_type = "drag";
+  ui_label = "Far Plane";
+  ui_category = "Depth";
+  ui_tooltip = "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE=<value>";
+  ui_min = 0.0; ui_max = 1000.0;
+  ui_step = 0.001;
 > = 0.01;
 
 uniform float fUIDepthMultiplier <
-    ui_type = "drag";
-ui_label = "Multiplier";
-ui_category = "Depth";
-ui_tooltip = "RESHADE_DEPTH_MULTIPLIER=<value>";
-ui_min = 0.0; ui_max = 1000.0;
-ui_step = 0.001;
+  ui_type = "drag";
+  ui_label = "Multiplier";
+  ui_category = "Depth";
+  ui_tooltip = "RESHADE_DEPTH_MULTIPLIER=<value>";
+  ui_min = 0.0; ui_max = 1000.0;
+  ui_step = 0.001;
 > = 1.0;
 
 // -- Aspect Options --
 
 uniform bool bUIUseCustomAspectRatio <
-    ui_label = "Use Custom Aspect Ratio";
-ui_category = "Aspect ratio";
+  ui_label = "Use Custom Aspect Ratio";
+  ui_category = "Aspect ratio";
 > = false;
 
 uniform float AspectRatio <
-    ui_type = "drag";
-ui_label = "Correct proportions";
-ui_category = "Aspect ratio";
-ui_min = -4.0; ui_max = 4.0;
-ui_step = 0.01;
+  ui_type = "drag";
+  ui_label = "Correct proportions";
+  ui_category = "Aspect ratio";
+  ui_min = -4.0; ui_max = 4.0;
+  ui_step = 0.01;
 > = 1.0;
 
 uniform float ScaleX <
-    ui_type = "drag";
-ui_label = "Scale image X";
-ui_category = "Aspect ratio";
-ui_min = 0.0; ui_max = 4.0;
-ui_step = 0.001;
+  ui_type = "drag";
+  ui_label = "Scale image X";
+  ui_category = "Aspect ratio";
+  ui_min = 0.0; ui_max = 4.0;
+  ui_step = 0.001;
 > = 1.0;
 
 uniform float ScaleY <
-    ui_type = "drag";
-ui_label = "Scale image Y";
-ui_category = "Aspect ratio";
-ui_min = 0.0; ui_max = 4.0;
-ui_step = 0.001;
+  ui_type = "drag";
+  ui_label = "Scale image Y";
+  ui_category = "Aspect ratio";
+  ui_min = 0.0; ui_max = 4.0;
+  ui_step = 0.001;
 > = 1.0;
 
 uniform float fUIDepthXOffset <
-    ui_label = "Offset X Relative";
-ui_category = "Offsets";
-ui_type = "drag";
-ui_step = 0.001;
+  ui_label = "Offset X Relative";
+  ui_category = "Offsets";
+  ui_type = "drag";
+  ui_step = 0.001;
 > = 0.0;
 
 // uniform float fUIDepthXPxOffset <
@@ -167,10 +179,10 @@ ui_step = 0.001;
 // > = 0.0;
 
 uniform float fUIDepthYOffset <
-    ui_label = "Offset Y Relative";
-ui_category = "Offsets";
-ui_type = "drag";
-ui_step = 0.001;
+  ui_label = "Offset Y Relative";
+  ui_category = "Offsets";
+  ui_type = "drag";
+  ui_step = 0.001;
 > = 0.0;
 
 // uniform float fUIDepthYPxOffset <
@@ -180,14 +192,14 @@ ui_step = 0.001;
 // > = 0.0;
 
 uniform bool FitScreen <
-    ui_label = "Scale image to borders";
-ui_category = "Aspect ratio";
+  ui_label = "Scale image to borders";
+  ui_category = "Aspect ratio";
 > = true;
 
 uniform float4 Color <
-    ui_label = "Background color";
-ui_category = "Aspect ratio";
-ui_type = "color";
+  ui_label = "Background color";
+  ui_category = "Aspect ratio";
+  ui_type = "color";
 > = float4(0.027, 0.027, 0.027, 0.17);
 
 // uniform int iUIPresentType <
@@ -249,248 +261,264 @@ ui_type = "color";
 
 bool isBottomScreenPx(float2 input_tex) {
 
-    // disabled? return false
-    if (iUIBottomScreenPosition == 4) {
-        return false;
-    }
+  // disabled? return false
+  if (iUIBottomScreenPosition == 4) {
+    return false;
+  }
 
-    bool isBottomScreenPixel = false;
-    if (iUIBottomScreenPosition == 0) {
-        // bottom
-        isBottomScreenPixel = input_tex.x > 0.5;
-    }
-    else if (iUIBottomScreenPosition == 1) {
-        // top
-        isBottomScreenPixel = input_tex.x < 0.5;
-    }
-    else if (iUIBottomScreenPosition == 2) {
-        // left
-        isBottomScreenPixel = input_tex.y > 0.55546875;
-    }
-    else if (iUIBottomScreenPosition == 3) {
-        // right
-        isBottomScreenPixel = input_tex.y < 1.0 - 0.55546875;
-    }
-    //  else if (iUIBottomScreenPosition == 4) {
-    //  // right > small
-    //  isBottomScreenPixel = input_tex.y > 0.83333333;
-    // }
+  bool isBottomScreenPixel = false;
+  if (iUIBottomScreenPosition == 0) {
+    // bottom
+    isBottomScreenPixel = input_tex.x > 0.5;
+  } else if (iUIBottomScreenPosition == 1) {
+    // top
+    isBottomScreenPixel = input_tex.x < 0.5;
+  } else if (iUIBottomScreenPosition == 2) {
+    // left
+    isBottomScreenPixel = input_tex.y > 0.55546875;
+  } else if (iUIBottomScreenPosition == 3) {
+    // right
+    isBottomScreenPixel = input_tex.y < 1.0 - 0.55546875;
+  }
+  //  else if (iUIBottomScreenPosition == 4) {
+  //  // right > small
+  //  isBottomScreenPixel = input_tex.y > 0.83333333;
+  // }
 
-    // return false;
-    return isBottomScreenPixel;
+  // return false;
+  return isBottomScreenPixel;
 }
 
-float2 scaleCoordinates(float2 mytexcoord) {
+float2 scaleCoordinates(float2 mytexcoord){
 
-    int2 depthSize = tex2Dsize(OrigDepth).yx;
-    int2 bufferSize = int2(BUFFER_WIDTH, BUFFER_HEIGHT);
+  int2 depthSize = tex2Dsize(OrigDepth).yx;
+  int2 bufferSize = int2(BUFFER_WIDTH, BUFFER_HEIGHT);
 
-    if (bUIHalfDepthHeight) {
-        depthSize.y /= 2;
-        mytexcoord.x -= 0.5;
-        mytexcoord.x /= 2.0;
-        mytexcoord.x += 0.5;
-    }
+  if(bUIHalfDepthHeight){
+    depthSize.y /= 2;
+    mytexcoord.x -= 0.5;
+    mytexcoord.x /= 2.0;
+    mytexcoord.x += 0.5;
+  }
 
-    float scaled_width, scaled_height, max_scaled_width, max_scaled_height;
-    if (
-        iUIBottomScreenPosition == 0
-        || iUIBottomScreenPosition == 1
-        ) {
-        // over/under top screen scaled relative dimensions
-        // 400 * 240 (really 400 x 480)
-        // 400   scaled width
-        // --- x ---
-        // 240   scaled height (BUFFER_HEIGHT/2)
-        scaled_width = BUFFER_WIDTH < BUFFER_HEIGHT ? BUFFER_WIDTH : (BUFFER_HEIGHT / 2) * 400 / 240;
-        scaled_height = BUFFER_HEIGHT <= BUFFER_WIDTH ? BUFFER_HEIGHT / 2 : BUFFER_WIDTH * 240 / 400;
-    }
-    else if (
-        iUIBottomScreenPosition == 2
-        || iUIBottomScreenPosition == 3
-        ) {
-        // sbs 400+320 by 240
-        // 720   scaled width
-        // --- x ---
-        // 240   scaled height
-        max_scaled_height = BUFFER_WIDTH * 240 / 720;
-        scaled_height = BUFFER_HEIGHT < max_scaled_height ? BUFFER_HEIGHT : max_scaled_height;
-        max_scaled_width = BUFFER_HEIGHT < max_scaled_height ? BUFFER_HEIGHT * 720 / 240 : BUFFER_WIDTH;
-        scaled_width = max_scaled_width * 0.5556; // 400 / 720
-    }
-    else if (
-        iUIBottomScreenPosition == 4
-        ) {
-        max_scaled_width = BUFFER_HEIGHT * 400 / 240;
-        scaled_width = BUFFER_WIDTH > max_scaled_width ? max_scaled_width : BUFFER_WIDTH;
+  float scaled_width, scaled_height, max_scaled_width, max_scaled_height;
+  if(
+    iUIBottomScreenPosition == 0
+    || iUIBottomScreenPosition == 1
+  ){
+    // over/under top screen scaled relative dimensions
+    // 400 * 240 (really 400 x 480)
+    // 400   scaled width
+    // --- x ---
+    // 240   scaled height (BUFFER_HEIGHT/2)
+    scaled_width = BUFFER_WIDTH < BUFFER_HEIGHT ? BUFFER_WIDTH : (BUFFER_HEIGHT/2) * 400 / 240;
+    scaled_height = BUFFER_HEIGHT <= BUFFER_WIDTH ? BUFFER_HEIGHT/2 : BUFFER_WIDTH * 240 / 400;
+  }
+  else if(
+    iUIBottomScreenPosition == 2
+    || iUIBottomScreenPosition == 3
+  ){
+     // sbs 400+320 by 240
+     // 720   scaled width
+     // --- x ---
+     // 240   scaled height
+     max_scaled_height = BUFFER_WIDTH * 240 / 720;
+     scaled_height = BUFFER_HEIGHT < max_scaled_height ? BUFFER_HEIGHT : max_scaled_height;
+     max_scaled_width = BUFFER_HEIGHT < max_scaled_height ? BUFFER_HEIGHT * 720 / 240 : BUFFER_WIDTH;
+     scaled_width = max_scaled_width * 0.5556; // 400 / 720
+  }
+  else if(
+    iUIBottomScreenPosition == 4
+  ){
+    max_scaled_width = BUFFER_HEIGHT * 400 / 240;
+    scaled_width = BUFFER_WIDTH > max_scaled_width ? max_scaled_width : BUFFER_WIDTH;
 
-        max_scaled_height = BUFFER_WIDTH * 240 / 400;
-        scaled_height = BUFFER_HEIGHT > max_scaled_height ? max_scaled_height : BUFFER_HEIGHT;
-    }
+    max_scaled_height = BUFFER_WIDTH * 240 / 400;
+    scaled_height = BUFFER_HEIGHT > max_scaled_height ? max_scaled_height : BUFFER_HEIGHT;
+  }
 
-    // map FULL BUFFER coordinate system down to just where the top screen is, relatively within the buffer
-    // so that when the depth map is sampled it's contents align to where the rgb top screen is rendered within the output buffer
+  // map FULL BUFFER coordinate system down to just where the top screen is, relatively within the buffer
+  // so that when the depth map is sampled it's contents align to where the rgb top screen is rendered within the output buffer
 
-    if (iUIBottomScreenPosition == 0) {
-        // top screen is on top, bottom screen is on bottom
+  if(iUIBottomScreenPosition == 0){
+    // top screen is on top, bottom screen is on bottom
 
-        // horizontal is still controlled by "y" here even tho i created this coord as .yx
-        mytexcoord.y -= .5;
-        mytexcoord.y /= scaled_width / BUFFER_WIDTH;
-        mytexcoord.y += .5;
+    // horizontal is still controlled by "y" here even tho i created this coord as .yx
+    mytexcoord.y -= .5;
+    mytexcoord.y /= scaled_width / BUFFER_WIDTH;
+    mytexcoord.y += .5;
 
-        // vert
-        mytexcoord.x -= 0.5;
-        mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
-    }
-    else if (iUIBottomScreenPosition == 1) {
-        // top screen is below bottom screen
+    // vert
+    mytexcoord.x -= 0.5;
+    mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
+  }
+  else if(iUIBottomScreenPosition == 1){
+    // top screen is below bottom screen
 
-        // horizontal is still controlled by "y" here even tho i created this coord as .yx
-        mytexcoord.y -= .5;
-        mytexcoord.y /= scaled_width / BUFFER_WIDTH;
-        mytexcoord.y += .5;
+    // horizontal is still controlled by "y" here even tho i created this coord as .yx
+    mytexcoord.y -= .5;
+    mytexcoord.y /= scaled_width / BUFFER_WIDTH;
+    mytexcoord.y += .5;
 
-        // vert
-        mytexcoord.x -= 0.5;
-        mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
-        mytexcoord.x += 1.0;
+    // vert
+    mytexcoord.x -= 0.5;
+    mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
+    mytexcoord.x += 1.0;
 
-    }
-    else if (iUIBottomScreenPosition == 2) {
-        // top screen is left of bottom screen
-        mytexcoord.y -= .5;
-        mytexcoord.y /= scaled_width / BUFFER_WIDTH;
-        mytexcoord.y += .1;
+  }
+  else if(iUIBottomScreenPosition == 2){
+    // top screen is left of bottom screen
+    mytexcoord.y -= .5;
+    mytexcoord.y /= scaled_width / BUFFER_WIDTH;
+    mytexcoord.y += .1;
 
-        mytexcoord.x -= .5;
-        mytexcoord.x /= max_scaled_height / BUFFER_HEIGHT;
-        mytexcoord.x += .5;
-    }
-    else if (iUIBottomScreenPosition == 3) {
-        // top screen is right of bottom screen
+    mytexcoord.x -= .5;
+    mytexcoord.x /= max_scaled_height / BUFFER_HEIGHT;
+    mytexcoord.x += .5;
+  }
+  else if(iUIBottomScreenPosition == 3){
+    // top screen is right of bottom screen
 
-        mytexcoord.y -= .5;
-        mytexcoord.y /= scaled_width / BUFFER_WIDTH;
-        mytexcoord.y += .9;
+    mytexcoord.y -= .5;
+    mytexcoord.y /= scaled_width / BUFFER_WIDTH;
+    mytexcoord.y += .9;
 
-        mytexcoord.x -= .5;
-        mytexcoord.x /= max_scaled_height / BUFFER_HEIGHT;
-        mytexcoord.x += .5;
-    }
-    // else if(iUIBottomScreenPosition == 4){
-    // //   // right small
-    // //   texcoord.y = texcoord.y * 1.22;
-    // //   texcoord.y = texcoord.y - (1.0 - 0.83333333);
-    // }
-    else {
-        // fullscreen
+    mytexcoord.x -= .5;
+    mytexcoord.x /= max_scaled_height / BUFFER_HEIGHT;
+    mytexcoord.x += .5;
+  }
+  // else if(iUIBottomScreenPosition == 4){
+  // //   // right small
+  // //   texcoord.y = texcoord.y * 1.22;
+  // //   texcoord.y = texcoord.y - (1.0 - 0.83333333);
+  // }
+  else {
+    // fullscreen
 
-        mytexcoord.y -= .5;
-        mytexcoord.y /= scaled_width / BUFFER_WIDTH;
-        mytexcoord.y += .5;
+    mytexcoord.y -= .5;
+    mytexcoord.y /= scaled_width / BUFFER_WIDTH;
+    mytexcoord.y += .5;
 
 
-        mytexcoord.x -= .5;
-        mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
-        mytexcoord.x += .5;
+    mytexcoord.x -= .5;
+    mytexcoord.x /= scaled_height / BUFFER_HEIGHT;
+    mytexcoord.x += .5;
 
-    }
+  }
 
-    // global scaling
-    mytexcoord.x = mytexcoord.x / ScaleY;
-    mytexcoord.y = mytexcoord.y / ScaleX;
+  // global scaling
+  mytexcoord.x = mytexcoord.x / ScaleY;
+  mytexcoord.y = mytexcoord.y / ScaleX;
 
-    if (bUIUseCustomAspectRatio) {
-        mytexcoord.x = mytexcoord.x * AspectRatio;
-        // mytexcoord.y = mytexcoord.y * AspectRatio;
-    }
-    // else
-    //  mytexcoord.y = mytexcoord.y * BUFFER_AR;
+  if(bUIUseCustomAspectRatio){
+    mytexcoord.x = mytexcoord.x * AspectRatio;
+    // mytexcoord.y = mytexcoord.y * AspectRatio;
+  }
+  // else
+  //  mytexcoord.y = mytexcoord.y * BUFFER_AR;
 
-    return mytexcoord;
+  return mytexcoord;
 }
 
 float GetModDepth(float2 tex : TEXCOORD, int which) {
-    float2 input_tex = float2(tex.y, tex.x);
-    float2 mytex = 1.0 - float2(tex.y, tex.x);
+  float2 input_tex = float2(tex.y, tex.x);
+  float2 mytex = 1.0 - float2(tex.y, tex.x);
 
-    // if (isBottomScreenPx(input_tex)){
-    //   return fUIBottomFocus;
-    // }
+  // if (isBottomScreenPx(input_tex)){
+  //   return fUIBottomFocus;
+  // }
 
-    mytex = scaleCoordinates(mytex);
+  mytex = scaleCoordinates(mytex);
 
-    if (bUIDepthIsUpsideDown) {
-        mytex.y = 1.0 - mytex.y;
-    }
+  if(bUIDepthIsUpsideDown){
+    mytex.y = 1.0 - mytex.y;
+  }
 
-    if (fUIDepthXOffset) {
-        mytex.y += fUIDepthXOffset / 2.000000001;
-    }
-    // else if(fUIDepthXPxOffset){
-      // mytex.x -= fUIDepthXPxOffset * BUFFER_RCP_WIDTH;
-    // }
+  if(fUIDepthXOffset){
+    mytex.y += fUIDepthXOffset / 2.000000001;
+  }
+  // else if(fUIDepthXPxOffset){
+    // mytex.x -= fUIDepthXPxOffset * BUFFER_RCP_WIDTH;
+  // }
 
-    if (fUIDepthYOffset) {
-        mytex.x -= fUIDepthYOffset / 2.000000001;
-    }
-    // else if(fUIDepthYPxOffset){
-    //  mytex.y += fUIDepthYPxOffset * BUFFER_RCP_HEIGHT;
-    // }
+  if(fUIDepthYOffset){
+    mytex.x -= fUIDepthYOffset / 2.000000001;
+  }
+  // else if(fUIDepthYPxOffset){
+  //  mytex.y += fUIDepthYPxOffset * BUFFER_RCP_HEIGHT;
+  // }
 
-    // can't have a variable that is a sampler? :<
-    //sampler whichSampler = which == 2 ? OrigDepth2 : OrigDepth;
-    float depth;
-    if (which == 1) {
-        depth = tex2Dlod(OrigDepth, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
-    }
-    else if (which == 2) {
-        depth = tex2Dlod(OrigDepth2, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
-    }
-    // else if(which == 3){
-    //   depth = tex2Dlod(OrigDepth3, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
-    // }
+  // can't have a variable that is a sampler? :<
+  //sampler whichSampler = which == 2 ? OrigDepth2 : OrigDepth;
+  float depth;
+  if(which == 1){
+    depth = tex2Dlod(OrigDepth, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
+  }else if(which == 2){
+    depth = tex2Dlod(OrigDepth2, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
+  }
+  // else if(which == 3){
+  //   depth = tex2Dlod(OrigDepth3, float4(mytex, 0, 0)).x * fUIDepthMultiplier;
+  // }
 
-    if (bUIDepthIsLog) {
-        const float C = 0.01;
-        depth = (exp(depth * log(C + 1.0)) - 1.0) / C;
-    }
+  if(bUIDepthIsLog){
+    const float C = 0.01;
+    depth = (exp(depth * log(C + 1.0)) - 1.0) / C;
+  }
 
-    // invert by default for citra
-    // depth = 1.0 - depth;
-    if (bUIDepthIsReversed) {
-        depth = 1.0 - depth;
-    }
+  // invert by default for citra
+  // depth = 1.0 - depth;
+  if(bUIDepthIsReversed){
+    depth = 1.0 - depth;
+  }
 
-    const float N = 1.0;
-    depth /= fUIFarPlane - depth * (fUIFarPlane - N);
+  const float N = 1.0;
+  depth /= fUIFarPlane - depth * (fUIFarPlane - N);
 
-    return depth;
+  return depth;
 }
 
-float4 MyPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
-  float depth = GetModDepth(tex,1);
-  return float4(depth,depth,depth,1.0);
+float4 MainDepthModifier(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
+
+  if(iUIUseDepthChannel == 2){
+    float2 texOffset = float2(tex);
+    texOffset.x *= 2.0;
+
+    float2 texOffset2 = float2(tex);
+    texOffset2.x *= 2.0;
+    texOffset2.x -= 1.0;
+
+
+    if(bSwapLR){
+      float depth = GetModDepth(texOffset2,1);
+      float depth2 = GetModDepth(texOffset,2);
+      return tex.x < 0.5 ? float4(depth2.xxx,1.0) : float4(depth.xxx,1.0);
+    }
+
+    float depth = GetModDepth(texOffset,1);
+    float depth2 = GetModDepth(texOffset2,2);
+    return tex.x < 0.5 ? float4(depth.xxx,1.0) : float4(depth2.xxx,1.0);
+  }
+  float depth = GetModDepth(tex,iUIUseDepthChannel);
+  return float4(depth.xxx,1.0);
 }
 
-float4 OrigPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
+float4 OrigPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
   float depth = tex2D(OrigDepth, tex).x;
   return float4(depth,depth,depth,1.0);
 }
 
-float4 Orig2PS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
+float4 Orig2PS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
   float depth = tex2D(OrigDepth2, tex).x;
   return float4(depth,depth,depth,1.0);
 }
 
-float4 RGBLeftPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
-  return tex2D(RGBLeft, tex);
-}
+// float4 RGBLeftPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
+//   return tex2D(RGBLeft, tex);
+// }
 
-float4 RGBRightPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
-  return tex2D(RGBRight, tex);
-}
+// float4 RGBRightPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
+//   return tex2D(RGBRight, tex);
+// }
 
 // float4 Orig3PS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
 //   float2 posHalf = texHalfWidth;
@@ -499,108 +527,113 @@ float4 RGBRightPS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
 //   return float4(depth,depth,depth,1.0);
 // }
 
-float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET{
-  if (iUIPreviewDepth == 3) {
+float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
+    float2 bbHalfWidth = float2(tex.xy);
+    bbHalfWidth.x += 0.5;
+    float2 secondTwo = float2(tex.xy);
+    secondTwo.x -= 0.5;
+  if(iUIPreviewDepth == 3){
     float2 texHalfWidth = float2(tex.xy);
     texHalfWidth.x *= 2.0;
 
-    float2 bbHalfWidth = float2(tex.xy);
-    bbHalfWidth.x += 0.5;
+
 
     float2 second = float2(texHalfWidth.xy);
     second.x -= 1.0;
 
-    float2 secondTwo = float2(tex.xy);
-    secondTwo.x -= 0.5;
 
-    float depth = GetModDepth(texHalfWidth,bSwapLR ? 2 : 1);
-    float depth2 = GetModDepth(second,bSwapLR ? 1 : 2);
-    if (bSwapLR) {
-      return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, bbHalfWidth), float4(depth.xxx,1.0), bUIPreviewAlpha)
-      : lerp(tex2D(ReShade::BackBuffer, secondTwo), float4(depth2.xxx,1.0), bUIPreviewAlpha); // tex2D(ReShade::BackBuffer, second)  
+
+    float depth = GetModDepth(texHalfWidth,bSwapLR?2:1);
+    float depth2 = GetModDepth(second,bSwapLR?1:2);
+    if(bSwapLR){
+      return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, bbHalfWidth), float4(depth.xxx,1.0), fUIPreviewAlpha)
+      : lerp(tex2D(ReShade::BackBuffer, secondTwo), float4(depth2.xxx,1.0), fUIPreviewAlpha); // tex2D(ReShade::BackBuffer, second)
     }
-    return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha)
-    : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth2.xxx,1.0), bUIPreviewAlpha); // tex2D(RGBRight, second)
+    return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), fUIPreviewAlpha)
+    : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth2.xxx,1.0), fUIPreviewAlpha); // tex2D(RGBRight, second)
   }
-  if (iUIPreviewDepth == 4) {
+  float2 flippable = float2(tex.xy);
+  float2 flippable2 = float2(tex.xy);
+  if(bSwapLR){
+    flippable.x += 0.5;
+    flippable.y *= 2.0;
+    flippable2.x -= 0.5;
+    flippable2.y *= 2.0;
+  }
+  if(iUIPreviewDepth == 4){
     float2 texHalfWidth = float2(tex.xy);
     texHalfWidth.x *= 2.0;
     texHalfWidth.y *= 2.0;
     texHalfWidth.y -= 1.0;
     float2 quadTex = float2(tex.xy);
     quadTex *= 2;
-    float2 flippable = float2(tex.xy);
-    float2 flippable2 = float2(tex.xy);
+
 
     float2 second = float2(texHalfWidth.xy);
     second.x -= 1.0;
 
-    float depth = GetModDepth(texHalfWidth,bSwapLR ? 2 : 1);
-    float depth2 = GetModDepth(second,bSwapLR ? 1 : 2);
+    float depth = GetModDepth(texHalfWidth,bSwapLR?2:1);
+    float depth2 = GetModDepth(second,bSwapLR?1:2);
 
-    if (bSwapLR) {
-      flippable.x += 0.5;
-      flippable.y *= 2.0;
-      flippable2.x -= 0.5;
-      flippable2.y *= 2.0;
-    }
-    if (tex.x < 0.5) {
-      if (tex.y < 0.5) {
-          // rgb L
 
-          return tex2D(ReShade::BackBuffer,flippable);
-        }
-  else {
-          // depth L
-          return float4(depth.xxx,1.0);
-        }
+    if(tex.x < 0.5){
+      if(tex.y < 0.5){
+        // rgb L
+
+        return tex2D(ReShade::BackBuffer,flippable);
+      }else{
+        // depth L
+        return float4(depth.xxx,1.0);
       }
-  else {
-   if (tex.y < 0.5) {
-     return tex2D(ReShade::BackBuffer,flippable2);
-   }
-else {
- return float4(depth2.xxx,1.0);
-}
-}
-}
-if (iUIPreviewDepth > 0) {
-  float depth = GetModDepth(tex,iUIPreviewDepth);
-  return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), bUIPreviewAlpha);
-}
-return tex2D(ReShade::BackBuffer, tex);
+    }else{
+      if(tex.y < 0.5){
+        return tex2D(ReShade::BackBuffer,flippable2);
+      }else{
+        return float4(depth2.xxx,1.0);
+      }
+    }
+  }
+  if(iUIPreviewDepth > 0){
+    float depth = GetModDepth(tex,iUIPreviewDepth);
+    return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), fUIPreviewAlpha);
+  }
+  if(bSwapLR){
+    return tex.x < 0.5 ? tex2D(ReShade::BackBuffer, bbHalfWidth)
+: tex2D(ReShade::BackBuffer, secondTwo);
+  }
+  return tex2D(ReShade::BackBuffer, tex);
 }
 
 
 // FullscreenVS
 technique Citra {
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = OrigPS;
-        RenderTarget = UntouchedDepthTex;
-    }
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = Orig2PS;
-        RenderTarget = UntouchedDepthTex_2;
-    }
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = RGBLeftPS;
-        RenderTarget = RGB_L;
-    }
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = RGBRightPS;
-        RenderTarget = RGB_R;
-    }
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = MyPS;
-        RenderTarget = ModifiedDepthTex;
-    }
-    pass {
-        VertexShader = PostProcessVS;
-        PixelShader = PreviewDepth;
-    }
+  pass {
+    VertexShader = PostProcessVS;
+    PixelShader = OrigPS;
+    RenderTarget = UntouchedDepthTex;
+  }
+  pass {
+    VertexShader = PostProcessVS;
+    PixelShader = Orig2PS;
+    RenderTarget = UntouchedDepthTex_2;
+  }
+  //pass {
+  //  VertexShader = PostProcessVS;
+  //  PixelShader = RGBLeftPS;
+  //  RenderTarget = RGB_L;
+  //}
+  //pass {
+  //  VertexShader = PostProcessVS;
+  //  PixelShader = RGBRightPS;
+  //  RenderTarget = RGB_R;
+  //}
+  pass {
+    VertexShader = PostProcessVS;
+    PixelShader = MainDepthModifier;
+    RenderTarget = ModifiedDepthTex;
+  }
+  pass {
+    VertexShader = PostProcessVS;
+    PixelShader = PreviewDepth;
+  }
 }
