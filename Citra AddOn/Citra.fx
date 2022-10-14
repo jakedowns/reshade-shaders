@@ -40,11 +40,11 @@ uniform int iUIPreviewDepth <
   ui_type = "combo";
   ui_category = "Preview Depth Buffer";
   ui_label = "Preview Depth Buffer Mode";
-  ui_items = "Off\0"
-             "Left\0"
-             "Right\0"
-             "SBS\0"
-             "Quad\0";
+  ui_items = "Off\0" // 0
+             "Left\0" // 1
+             "Right\0" // 2
+             "SBS\0" // 3
+             "Quad\0"; // 4
 > = 0;
 
 uniform float fUIPreviewAlpha <
@@ -91,11 +91,11 @@ uniform int iUIBottomScreenPosition <
   ui_type = "combo";
   ui_label = "Bottom Screen Position";
   ui_category = "Bottom Screen";
-  ui_items = "Bottom\0"
-             "Top\0"
-             "Left\0"
-             "Right\0"
-             "Disabled\0";
+  ui_items = "Bottom\0" // 0
+             "Top\0"    // 1
+             "Left\0"   // 2
+             "Right\0"  // 3
+             "Disabled\0"; // 4
 > = 0;
 
 uniform float fUIBottomFocus <
@@ -201,6 +201,12 @@ uniform float4 Color <
   ui_category = "Aspect ratio";
   ui_type = "color";
 > = float4(0.027, 0.027, 0.027, 0.17);
+
+
+
+uniform float fadd <ui_type = "slider"; ui_min = -10.0; ui_step = 0.5; > = 0.0f;
+uniform float fmult <ui_type = "slider"; ui_min = -10.0; ui_step = 0.5; > = 0.0f;
+uniform float fadd2 <ui_type = "slider"; ui_min = -10.0; ui_step = 0.5; > = 0.0f;
 
 // uniform int iUIPresentType <
 //   ui_type = "combo";
@@ -521,87 +527,122 @@ float4 Orig2PS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
 // }
 
 // float4 Orig3PS(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
-//   float2 posHalf = texHalfWidth;
-//   texHalfWidth.y /= 2.0;
-//   float depth = tex.y < 0.5 tex2D(OrigDepth, texHalfWidth).x : tex2D(OrigDepth2, texHalfWidth).x;
+//   float2 posHalf = depth_coords;
+//   depth_coords.y /= 2.0;
+//   float depth = tex.y < 0.5 tex2D(OrigDepth, depth_coords).x : tex2D(OrigDepth2, depth_coords).x;
 //   return float4(depth,depth,depth,1.0);
 // }
 
 float4 PreviewDepth(float4 pos : SV_POSITION, float2 tex : TEXCOORD) : SV_TARGET {
-    float2 bbHalfWidth = float2(tex.xy);
-    bbHalfWidth.x += 0.5;
-    float2 secondTwo = float2(tex.xy);
-    secondTwo.x -= 0.5;
+  float2 og_tex = float2(tex.xy);
+
+  float2 back_buffer_coord = float2(og_tex.xy);
+  back_buffer_coord.x += 0.5;
+
+  float2 back_buffer_coord_right = float2(og_tex.xy);
+  back_buffer_coord_right.x -= 0.5;
+
+  // @ return SBS_PS
   if(iUIPreviewDepth == 3){
-    float2 texHalfWidth = float2(tex.xy);
-    texHalfWidth.x *= 2.0;
+    float2 depth_coords = float2(og_tex.xy);
+    depth_coords.x *= 2.0;
 
+    float2 depth_coords_right = float2(depth_coords.xy);
+    depth_coords_right.x -= 1.0;
 
+    float depth_sample = GetModDepth(depth_coords,bSwapLR?2:1);
+    float depth_sample_2 = GetModDepth(depth_coords_right,bSwapLR?1:2);
 
-    float2 second = float2(texHalfWidth.xy);
-    second.x -= 1.0;
-
-
-
-    float depth = GetModDepth(texHalfWidth,bSwapLR?2:1);
-    float depth2 = GetModDepth(second,bSwapLR?1:2);
     if(bSwapLR){
-      return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, bbHalfWidth), float4(depth.xxx,1.0), fUIPreviewAlpha)
-      : lerp(tex2D(ReShade::BackBuffer, secondTwo), float4(depth2.xxx,1.0), fUIPreviewAlpha); // tex2D(ReShade::BackBuffer, second)
+      return og_tex.x < 0.5
+        ? lerp(tex2D(ReShade::BackBuffer, back_buffer_coord), float4(depth_sample.xxx,1.0), fUIPreviewAlpha)
+        : lerp(tex2D(ReShade::BackBuffer, back_buffer_coord_right), float4(depth_sample_2.xxx,1.0), fUIPreviewAlpha); // tex2D(ReShade::BackBuffer, depth_coords_right)
     }
-    return tex.x < 0.5 ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), fUIPreviewAlpha)
-    : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth2.xxx,1.0), fUIPreviewAlpha); // tex2D(RGBRight, second)
+    return og_tex.x < 0.5
+      ? lerp(tex2D(ReShade::BackBuffer, tex), float4(depth_sample.xxx,1.0), fUIPreviewAlpha)
+      : lerp(tex2D(ReShade::BackBuffer, tex), float4(depth_sample_2.xxx,1.0), fUIPreviewAlpha); // tex2D(RGBRight, depth_coords_right)
   }
-  float2 flippable = float2(tex.xy);
-  float2 flippable2 = float2(tex.xy);
-  if(bSwapLR){
-    flippable.x += 0.5;
-    flippable.y *= 2.0;
-    flippable2.x -= 0.5;
-    flippable2.y *= 2.0;
-  }
+
+  float2 rgb_coords_left = float2(og_tex.xy);
+  float2 rgb_coords_right = float2(og_tex.xy);
+
+  //rgb_coords_right.x -= 1.0;
+  //rgb_coords_right.x *= 2.0;
+  //rgb_coords_right.x //+= 0.5;
+
+  // return Quad-View PX Data
   if(iUIPreviewDepth == 4){
-    float2 texHalfWidth = float2(tex.xy);
-    texHalfWidth.x *= 2.0;
-    texHalfWidth.y *= 2.0;
-    texHalfWidth.y -= 1.0;
-    float2 quadTex = float2(tex.xy);
-    quadTex *= 2;
+    if(bSwapLR){
+      // left
+      rgb_coords_left.x += 0.5;
+      // right
+      rgb_coords_right.x -= 0.5;
+    }
+
+    // bottom screen disabled
+    if(iUIBottomScreenPosition == 4){
+      // sample half height
+      rgb_coords_left.y *= 2.0;
+      rgb_coords_right.y *= 2.0;
+    }
 
 
-    float2 second = float2(texHalfWidth.xy);
-    second.x -= 1.0;
 
-    float depth = GetModDepth(texHalfWidth,bSwapLR?2:1);
-    float depth2 = GetModDepth(second,bSwapLR?1:2);
+    float2 depth_coords_left = float2(tex.xy);
+    float2 depth_coords_right = float2(depth_coords_left.xy);
 
+    depth_coords_left.y *= 2.0;
+    depth_coords_right.y *= 2.0;
 
-    if(tex.x < 0.5){
-      if(tex.y < 0.5){
-        // rgb L
+    depth_coords_left.y -= 1.0;
+    depth_coords_right.y -= 1.0;
 
-        return tex2D(ReShade::BackBuffer,flippable);
+    depth_coords_left.x *= 2.0;
+
+    depth_coords_right.x *= 2.0;
+    depth_coords_right.x -= 1.0;
+
+    float depth_sample = GetModDepth(depth_coords_left,bSwapLR?2:1);
+    float depth_sample_2 = GetModDepth(depth_coords_right,bSwapLR?1:2);
+
+    if(og_tex.x < 0.5){
+      // first col
+      if(og_tex.y < 0.5){
+        // first row
+        // Q1 rgb L
+        // return float4(float3(1.0,0.0,0.0),1.0);
+        return tex2D(ReShade::BackBuffer,rgb_coords_left);
       }else{
-        // depth L
-        return float4(depth.xxx,1.0);
+        // Q3 depth L
+        return float4(depth_sample.xxx,1.0);
       }
     }else{
-      if(tex.y < 0.5){
-        return tex2D(ReShade::BackBuffer,flippable2);
+      if(og_tex.y < 0.5){
+        // Q2 rgb R
+        //return float4(float3(0.0,0.0,1.0),1.0);
+        return tex2D(ReShade::BackBuffer,rgb_coords_right);
       }else{
-        return float4(depth2.xxx,1.0);
+        // Q4 depth R
+        return float4(depth_sample_2.xxx,1.0);
       }
     }
   }
+
+  // return left or right single full width
   if(iUIPreviewDepth > 0){
-    float depth = GetModDepth(tex,iUIPreviewDepth);
-    return lerp(tex2D(ReShade::BackBuffer, tex), float4(depth.xxx,1.0), fUIPreviewAlpha);
+    float depth_sample = GetModDepth(og_tex,iUIPreviewDepth);
+    return lerp(tex2D(ReShade::BackBuffer, og_tex), float4(depth_sample.xxx,1.0), fUIPreviewAlpha);
   }
+
+  // return SBS RGB Reversed
   if(bSwapLR){
-    return tex.x < 0.5 ? tex2D(ReShade::BackBuffer, bbHalfWidth)
-: tex2D(ReShade::BackBuffer, secondTwo);
+    return og_tex.x < 0.5
+      ? tex2D(ReShade::BackBuffer, back_buffer_coord)
+      : tex2D(ReShade::BackBuffer, back_buffer_coord_right);
   }
-  return tex2D(ReShade::BackBuffer, tex);
+
+  // return
+  return tex2D(ReShade::BackBuffer, og_tex);
 }
 
 
