@@ -1,7 +1,11 @@
+.history
+
 Citra AddOn/.vs/
 Citra AddOn/intermediate/
 Citra AddOn/bin/
 Citra AddOn/deps/imgui/
+!Citra AddOn/deps/imgui/imconfig.h
+!Citra AddOn/deps/imgui/imgui.h
 
 # Visual Studio cache files
 */.vs/
