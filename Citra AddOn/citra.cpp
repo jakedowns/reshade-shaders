@@ -641,6 +641,28 @@ static void on_destroy_effect_runtime(effect_runtime *runtime)
 	runtime->destroy_private_data<generic_depth_data>();
 }
 
+// before glShaderSource
+static bool on_create_pipeline(device* device, pipeline_layout layout, uint32_t subobject_count, const pipeline_subobject* subobjects)
+{
+	char label[512] = "";
+	sprintf_s(label, "on create pipeline | %d 0x%016llx type: %d", subobject_count, layout.handle, subobjects->type);
+	reshade::log_message(3, label);
+	return false; // false = unmodified
+}
+
+// after glUseProgram
+static void on_bind_pipeline(command_list* cmd_list, pipeline_stage stages, pipeline pipeline)
+{
+	reshade::log_message(3, "on bind pipeline");
+}
+
+// after glLinkProgram
+static void on_init_pipeline(device* device, pipeline_layout layout, uint32_t subobject_count, const pipeline_subobject* subobjects, pipeline pipeline)
+{
+	char label[512] = "";
+	sprintf_s(label, "on init pipeline | %d 0x%016llx type: %d", subobject_count, layout.handle, subobjects->type);
+	reshade::log_message(3, label);
+}
 static bool on_create_resource(device *device, resource_desc &desc, subresource_data *, resource_usage)
 {
 	if (desc.type != resource_type::surface && desc.type != resource_type::texture_2d)
@@ -1867,6 +1889,10 @@ void register_addon_depth()
 	reshade::register_event<reshade::addon_event::destroy_command_queue>(on_destroy_command_queue);
 	reshade::register_event<reshade::addon_event::destroy_effect_runtime>(on_destroy_effect_runtime);
 
+	reshade::register_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
+	reshade::register_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+	reshade::register_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
+
 	reshade::register_event<reshade::addon_event::create_resource>(on_create_resource);
 	reshade::register_event<reshade::addon_event::create_resource_view>(on_create_resource_view);
 	reshade::register_event<reshade::addon_event::destroy_resource>(on_destroy_resource);
@@ -1902,6 +1928,10 @@ void unregister_addon_depth()
 	reshade::unregister_event<reshade::addon_event::destroy_command_list>(on_destroy_command_list);
 	reshade::unregister_event<reshade::addon_event::destroy_command_queue>(on_destroy_command_queue);
 	reshade::unregister_event<reshade::addon_event::destroy_effect_runtime>(on_destroy_effect_runtime);
+
+	reshade::unregister_event<reshade::addon_event::create_pipeline>(on_create_pipeline);
+	reshade::unregister_event<reshade::addon_event::bind_pipeline>(on_bind_pipeline);
+	reshade::unregister_event<reshade::addon_event::init_pipeline>(on_init_pipeline);
 
 	reshade::unregister_event<reshade::addon_event::create_resource>(on_create_resource);
 	reshade::unregister_event<reshade::addon_event::create_resource_view>(on_create_resource_view);
