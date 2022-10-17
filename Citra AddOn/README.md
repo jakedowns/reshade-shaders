@@ -68,5 +68,16 @@ DisabledAddons=Generic Depth
 - emufan4568 - thanks for your help on the Citra discord #development channel
 - jakedowns - follow me on twitter.com/jakedowns for future updates | support my dev work on patreon.com/jakedownsthings | follow my art work on instagram.com/jakedownsthings
 
+### Video
+
+
+
+https://user-images.githubusercontent.com/1683122/196085074-107558b8-6426-4692-a38a-8b72487b69ec.mp4
+
+
+
 ### Images
 ![image](https://user-images.githubusercontent.com/1683122/193262894-73fb5d86-0a54-4ef2-bf0d-61bba3a800a5.png)
+![](https://i.imgur.com/6uZalSm.png)
+![](https://i.imgur.com/AqOIa53.png)
+
