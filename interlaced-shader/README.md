@@ -12,6 +12,7 @@
 
 > Each LKGP is uniquely calibrated, and those values need to be specified in the shader to get the correct output. In future versions, I might automate this step.
 > Go to this URL and copy your Looking Glass Portrait's Calibration Data: https://jakedowns.github.io/looking-glass-calibration.html
+> NOTE: you can manually grab the values if you connect to your LKGP via USB and open it's internal storage in the explorer and navigate to `LKG_calibration/visual.json`
 
 5. in `lookingglass.glsl` replace my calibration values with yours
 
